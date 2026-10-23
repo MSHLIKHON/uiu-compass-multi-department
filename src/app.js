@@ -2688,6 +2688,13 @@ function renderFeeCalculator(metricsOverride = null) {
   const metrics = metricsOverride || computeAcademicMetrics();
   const prog = metrics.program;
 
+  const batchInput = document.getElementById('fee-student-batch');
+  if (batchInput && !batchInput.value) {
+    const termOrder = appState.profile.admissionTerm === 'Spring' ? 1 : appState.profile.admissionTerm === 'Summer' ? 2 : 3;
+    batchInput.value = `${String(appState.profile.admissionYear || 2024).slice(-2)}${termOrder}`;
+  }
+  const studentBatch = Number(batchInput?.value) || 0;
+
   const regCr = Math.max(0, parseFloat(document.getElementById('fee-reg-credits').value) || 0);
   const nonWaivCr = Math.max(0, parseFloat(document.getElementById('fee-nonwaivable-credits').value) || 0);
   const retakeCr = Math.max(0, parseFloat(document.getElementById('fee-retake-credits').value) || 0);
@@ -2717,8 +2724,9 @@ function renderFeeCalculator(metricsOverride = null) {
   const totalPayable = netRegularTuition + nonWaivableTuition + netRetakeTuition + nonWaivableFixedCharges + prevBal;
   const remainingBalance = Math.max(0, totalPayable - paidAmt);
 
-  // Official UIU Installment Calculation: Tk 20,000 before registration, remainder 40%/30%/30% (Trimester) or 4x25% (Semester)
-  const regDownPayment = Math.min(remainingBalance, 20000);
+  // UIU requires the Tk 20,000 registration payment only from batch 252 onward.
+  const registrationPaymentRequired = studentBatch >= 252;
+  const regDownPayment = registrationPaymentRequired ? Math.min(remainingBalance, 20000) : 0;
   const installPool = Math.max(0, remainingBalance - regDownPayment);
 
   const rateSourceBadge = appState.profile.customTuitionOverride
@@ -2728,7 +2736,7 @@ function renderFeeCalculator(metricsOverride = null) {
   const installmentsHtml = prog.termSystem === 'Semester'
     ? `
       <div class="grid grid-cols-5 gap-2 text-center font-mono text-sm pt-2">
-        <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">Registration</div><strong>Tk ${Math.round(regDownPayment).toLocaleString()}</strong></div>
+        <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">${registrationPaymentRequired ? 'Registration payment' : 'No fixed advance'}</div><strong>Tk ${Math.round(regDownPayment).toLocaleString()}</strong></div>
         <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">1st (25%)</div><strong>Tk ${Math.round(installPool * 0.25).toLocaleString()}</strong></div>
         <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">2nd (25%)</div><strong>Tk ${Math.round(installPool * 0.25).toLocaleString()}</strong></div>
         <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">3rd (25%)</div><strong>Tk ${Math.round(installPool * 0.25).toLocaleString()}</strong></div>
@@ -2737,7 +2745,7 @@ function renderFeeCalculator(metricsOverride = null) {
     `
     : `
       <div class="grid grid-cols-4 gap-2 text-center font-mono text-sm pt-2">
-        <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">Registration</div><strong>Tk ${Math.round(regDownPayment).toLocaleString()}</strong></div>
+        <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">${registrationPaymentRequired ? 'Registration payment' : 'No fixed advance'}</div><strong>Tk ${Math.round(regDownPayment).toLocaleString()}</strong></div>
         <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">1st Inst (40%)</div><strong>Tk ${Math.round(installPool * 0.40).toLocaleString()}</strong></div>
         <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">2nd Inst (30%)</div><strong>Tk ${Math.round(installPool * 0.30).toLocaleString()}</strong></div>
         <div class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"><div class="text-xs text-slate-400">3rd Inst (30%)</div><strong>Tk ${Math.round(installPool * 0.30).toLocaleString()}</strong></div>
@@ -2750,6 +2758,7 @@ function renderFeeCalculator(metricsOverride = null) {
         <span class="font-bold">Transparent Fee Breakdown (${prog.termSystem})</span>
         ${rateSourceBadge}
       </div>
+      <div class="rounded-xl bg-sky-50 dark:bg-sky-900/20 px-3 py-2 text-xs text-sky-800 dark:text-sky-200">Batch ${studentBatch || 'not set'}: ${registrationPaymentRequired ? 'Tk 20,000 registration payment applies; remaining balance is shown in installments.' : 'No fixed Tk 20,000 registration payment. Installments are calculated from the remaining balance.'} Update your batch above if needed. This estimate does not replace your UCAM bill.</div>
       <div class="flex justify-between"><span>Gross Tuition (${(regCr + nonWaivCr + retakeCr).toFixed(1)} Cr × Tk ${perCredit.toLocaleString()}):</span><span class="font-mono font-semibold">Tk ${grossTuition.toLocaleString()}</span></div>
       <div class="flex justify-between"><span>Waiver-Eligible Tuition (${regCr.toFixed(1)} Cr):</span><span class="font-mono">Tk ${waiverEligibleTuition.toLocaleString()}</span></div>
       <div class="flex justify-between text-emerald-600 dark:text-emerald-400"><span>Tuition Waiver Discount (${waiverPct}%):</span><span class="font-mono font-bold">- Tk ${waiverDiscount.toLocaleString()}</span></div>
