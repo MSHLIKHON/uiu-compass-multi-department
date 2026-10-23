@@ -2,13 +2,18 @@
 // existing inline UI actions remain globally available.
 const loaderScriptUrl = document.currentScript.src;
 
-fetch(new URL('./data.json', loaderScriptUrl))
-  .then((response) => {
-    if (!response.ok) throw new Error(`Academic data request failed (${response.status}).`);
-    return response.json();
+Promise.all([
+  fetch(new URL('./data.json', loaderScriptUrl)),
+  fetch(new URL('./exam-routines.json', loaderScriptUrl))
+])
+  .then(async ([dataResponse, routineResponse]) => {
+    if (!dataResponse.ok) throw new Error(`Academic data request failed (${dataResponse.status}).`);
+    if (!routineResponse.ok) throw new Error(`Exam routine data request failed (${routineResponse.status}).`);
+    return Promise.all([dataResponse.json(), routineResponse.json()]);
   })
-  .then((data) => {
+  .then(([data, routines]) => {
     window.UIU_COMPASS_DATA = data;
+    window.UIU_COMPASS_EXAM_ROUTINES = routines;
     const app = document.createElement('script');
     app.src = new URL('./app.js', loaderScriptUrl).href;
     app.onerror = () => showDataError('The application script could not be loaded. Refresh the page and try again.');

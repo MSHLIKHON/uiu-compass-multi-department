@@ -3,6 +3,7 @@
  * ============================================================================ */
 
 const DATA_BUNDLE = window.UIU_COMPASS_DATA;
+const EXAM_ROUTINES = window.UIU_COMPASS_EXAM_ROUTINES || {};
 const UIU_GRADES = DATA_BUNDLE.grades;
 const GRADE_KEYS = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
 const ALL_STATUS_KEYS = [...GRADE_KEYS, 'W', 'I', 'RUNNING', 'PLANNED', 'NOT_TAKEN'];
@@ -1793,6 +1794,12 @@ function detectAdvisingConflicts(selectedCourses) {
   return { classConflicts: [], examConflicts, sameDayWarnings, duplicateCourses };
 }
 
+function getOfficialAdvisingExamSlot(code) {
+  const routine = EXAM_ROUTINES['cse-bscse-fall-2026'];
+  if (!routine || appState.profile.programId !== routine.programId) return null;
+  return routine.courses[normalizeCourseCode(code)] || null;
+}
+
 function renderAdvising(metricsOverride = null) {
   const metrics = metricsOverride || computeAcademicMetrics();
   const { program, classifiedCourses } = metrics;
@@ -1881,7 +1888,18 @@ function renderAdvising(metricsOverride = null) {
     const c = courseMap.get(code);
     if (!c) return null;
     const examSlot = appState.advisingExamSlots?.[code] || {};
-    return { id: code, code, title: c.title, examDay: examSlot.day || '', examSlot: examSlot.slot || '', credits: c.credits, courseMeta: c };
+    const officialSlot = getOfficialAdvisingExamSlot(code);
+    return {
+      id: code,
+      code,
+      title: c.title,
+      examDay: examSlot.day || officialSlot?.day || '',
+      examSlot: examSlot.slot || officialSlot?.slot || '',
+      officialSlot,
+      hasManualExamSlot: Boolean(examSlot.day || examSlot.slot),
+      credits: c.credits,
+      courseMeta: c
+    };
   }).filter(Boolean);
 
   const selectedCr = selectedObjs.reduce((s, o) => s + o.credits, 0);
@@ -1944,7 +1962,7 @@ function renderAdvising(metricsOverride = null) {
     selListEl.innerHTML = `<div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-400 text-center">No courses selected in advising worksheet.</div>`;
   } else {
     selListEl.innerHTML = selectedObjs.map(o => `
-      <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-sm">
+      <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-sm">
         <div class="min-w-0 flex-1">
           <span class="font-mono font-bold">${o.code}</span> • <span>${o.title}</span>
           <div class="text-xs text-slate-400 font-mono">${o.credits} Cr</div>
@@ -1953,6 +1971,9 @@ function renderAdvising(metricsOverride = null) {
           <select onchange="setAdvisingExamSlot('${o.code}', 'day', this.value)" aria-label="${o.code} exam day" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"><option value="">Day</option>${Array.from({length:7}, (_,i) => `<option value="Day ${i+1}" ${o.examDay === `Day ${i+1}` ? 'selected' : ''}>Day ${i+1}</option>`).join('')}</select>
           <select onchange="setAdvisingExamSlot('${o.code}', 'slot', this.value)" aria-label="${o.code} exam slot" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"><option value="">T-slot</option>${['T1','T2','T3','T4'].map(slot => `<option value="${slot}" ${o.examSlot === slot ? 'selected' : ''}>${slot}</option>`).join('')}</select>
           <button onclick="toggleAdvisingOffering('${o.code}')" class="text-rose-500 hover:underline font-bold">Remove</button>
+        </div>
+        <div class="basis-full text-[11px] ${o.hasManualExamSlot ? 'text-sky-500' : o.officialSlot?.day ? 'text-emerald-500' : 'text-slate-400'}">
+          ${o.hasManualExamSlot ? 'Your routine override' : o.officialSlot?.day ? `Auto-filled from ${EXAM_ROUTINES['cse-bscse-fall-2026'].label}` : o.officialSlot ? 'Official listing has no exam slot (N/A)' : 'Not in this official routine — choose a slot manually'}
         </div>
       </div>
     `).join('');
@@ -3660,6 +3681,17 @@ function runBuiltInUnitTests() {
     return result.clashCount === 1 && result.sameDayCount === 2 &&
       result.alertsById.a === 'TIME CONFLICT with ENG 1001' &&
       result.alertsById.c === 'Same-day exam with CSE 1001';
+  });
+  assertTest('16. Advising auto-fills CSE Fall 2026 exam slots only for the matching program', () => {
+    const previousProgram = appState.profile.programId;
+    appState.profile.programId = 'CSE';
+    const cseSlot = getOfficialAdvisingExamSlot('CSE 3411');
+    const labSlot = getOfficialAdvisingExamSlot('CSE 3412');
+    appState.profile.programId = 'EEE';
+    const otherProgramSlot = getOfficialAdvisingExamSlot('CSE 3411');
+    appState.profile.programId = previousProgram;
+    return cseSlot?.day === 'Day 5' && cseSlot?.slot === 'T1' &&
+      labSlot?.day === null && labSlot?.slot === null && otherProgramSlot === null;
   });
   // 13. ICS calendar generator
   assertTest('13. ICS export generates valid VCALENDAR & VEVENT blocks', () => {

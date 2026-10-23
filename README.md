@@ -26,11 +26,11 @@ UIU Compass brings academic records and planning tools together in one browser-b
 - Calculate CGPA, estimate a target CGPA, and plan retakes.
 - Review degree progress, prerequisites, course advising, and graduation requirements.
 - Estimate tuition and fees using the program and student settings in the app.
-- Search courses for pre-advising, assign each one a generic **Day 1–7** and **T1–T4** exam slot, and flag same-slot conflicts.
+- Search courses for pre-advising, auto-fill CSE exam slots from the published **BSCSE Fall 2026** offering where available, override slots manually, and flag same-slot conflicts. These values are exam days/slots, not class meeting times; other programs and courses can be entered manually.
 - Import supported UCAM course history and export or print planning information where available.
 - Keep your workspace in the browser; no account is required.
 
-The exam planner does not contain a fixed trimester routine. Use the current official routine to assign each course's day and slot.
+The planner does not use fixed calendar exam dates. The advising auto-fill dataset is the CSE BSCSE Fall 2026 offering; verify that source against the routine for your trimester and adjust slots when needed. Other programs use manual slots until their official routine data is added.
 
 ## Try the app
 
@@ -56,6 +56,7 @@ Then open <http://localhost:8000>. The app uses public CDNs for some fonts and i
 │   ├── app.js                 # UI, planning tools, and calculations
 │   ├── data.js                # Loads the academic data, then starts the app
 │   ├── data.json              # Programs, curricula, grade policy, and sample data
+│   ├── exam-routines.json     # Published program exam-day/slot lookup data
 │   └── styles.css             # App-specific styles
 ├── .github/workflows/
 │   └── pages.yml              # Deploys the site to GitHub Pages
