@@ -1252,14 +1252,14 @@
       <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <span class="text-sm font-bold uppercase tracking-wider text-uiu-500">Multi-Department Versioned Exam Planner</span>
-            <h2 class="text-lg font-bold">Course Pre-advising &amp; Exam Conflict Checker</h2>
+            <span class="text-sm font-bold uppercase tracking-wider text-uiu-500">Course Pre-advising</span>
+            <h2 class="text-lg font-bold">Check Course Exam Conflicts</h2>
             <p id="exam-metadata-line" class="text-sm text-slate-500 dark:text-slate-400"></p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <select id="exam-type-select" onchange="renderExamRoutine()" aria-label="Select Exam Type" class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold">
-              <option value="Midterm">Midterm Examination</option>
-              <option value="Final">Final Examination</option>
+              <option value="Midterm">Midterm</option>
+              <option value="Final">Final</option>
             </select>
             <button onclick="exportExamRoutineIcs()" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition">
               <i class="fa-regular fa-calendar-plus mr-1"></i> Export .ICS
@@ -1281,15 +1281,15 @@
           <div class="lg:col-span-5 space-y-4">
             <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2.5">
               <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Check before pre-advising</h3>
-              <p class="text-xs text-slate-500">Search one course code, add it, then search the next. We’ll flag courses in the same exam day and time slot.</p>
+              <p class="text-xs text-slate-500">Search a course code and add it. Then choose Day 1–7 and T1–T4 for each course using the current official routine. Same day and slot means a conflict.</p>
               <input id="exam-search-input" type="text" oninput="renderExamRoutine()" placeholder="Type a course code (e.g. CSE 2213)" aria-label="Search exam by course code" class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm" />
               <div id="exam-available-list" class="space-y-1.5 max-h-52 overflow-y-auto pr-1"></div>
             </div>
 
-            <!-- Manual Exam Slot Adder -->
+            <!-- Generic course entry -->
             <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2.5 text-sm">
-              <h3 class="text-sm font-bold uppercase tracking-wider text-uiu-500">Add a course not found in the template</h3>
-              <p class="text-xs text-slate-500">Enter its day and UIU time slot from your official routine.</p>
+              <h3 class="text-sm font-bold uppercase tracking-wider text-uiu-500">Add a course manually</h3>
+              <p class="text-xs text-slate-500">Use this if the course is not in your selected program catalog.</p>
               <div class="grid grid-cols-2 gap-2">
                 <input id="custom-exam-code" type="text" placeholder="Course Code (e.g. CSE 3521)" class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono" />
                 <input id="custom-exam-sec" type="text" placeholder="Section (e.g. A)" class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" />
