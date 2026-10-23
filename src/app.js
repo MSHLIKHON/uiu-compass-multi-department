@@ -1199,7 +1199,9 @@ function detectUcamGrade(line, codeMatch, creditMatch) {
 
   // UCAM table copy is often tab-separated. Read the rightmost exact grade/status
   // cell, ignoring grade-point columns that may follow it.
-  const cells = line.split('\t').map(cell => cell.trim()).filter(Boolean);
+  const cells = line.includes('|')
+    ? line.split('|').map(cell => cell.replace(/&#x20;/gi, ' ').replace(/\*\*/g, '').trim()).filter(Boolean)
+    : line.split('\t').map(cell => cell.trim()).filter(Boolean);
   for (let i = cells.length - 1; i >= 0; i--) {
     const token = normalize(cells[i]);
     if (known.has(token)) return normalizeUcamStatus(token);
