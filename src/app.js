@@ -3826,10 +3826,31 @@ function initMouseDraggableTabNav() {
   window.addEventListener('mouseup', finish);
   window.addEventListener('blur', finish);
   nav.addEventListener('click', event => {
-    if (!suppressClick) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
+    if (suppressClick) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    // Route tab clicks here as well as through the inline handlers. This keeps
+    // navigation reliable when the menu has just been dragged or focused.
+    const button = event.target.closest('.nav-tab-btn');
+    const tabId = button?.id?.replace(/^tab-btn-/, '');
+    if (tabId) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      switchTab(tabId);
+    }
   }, true);
+
+  // A standard mouse wheel is vertical. Over the tab strip, use it to move
+  // through the horizontally overflowing section menu.
+  nav.addEventListener('wheel', event => {
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      nav.scrollLeft += event.deltaY;
+      event.preventDefault();
+    }
+  }, { passive: false });
 }
 
 function toggleLanguage() {
