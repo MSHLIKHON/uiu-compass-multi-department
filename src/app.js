@@ -147,7 +147,7 @@ function createDefaultState() {
     savedCgpaScenarios: [
       { id: 'sc-1', name: 'Dean List Push (30 Cr @ 3.75)', targetCgpa: 3.50, futureCredits: 30, reqGpa: 3.62 }
     ],
-    examSelection: ['OFF-CSE-3', 'OFF-CSE-8', 'OFF-CSE-5'], // Includes a conflict between OFF-CSE-3 & OFF-CSE-8 on 2026-12-07 09:30!
+    examSelection: [],
     customExams: [],
     coverProfile: {
       studentName: 'Mahmudul Hasan Likhon',
@@ -696,6 +696,10 @@ function initApp() {
     try {
       const parsed = JSON.parse(savedV2);
       appState = { ...createDefaultState(), ...parsed, profile: { ...createDefaultState().profile, ...(parsed.profile || {}) } };
+      // Remove the old prefilled demo routine so students start with their own pre-advising checks.
+      if (Array.isArray(appState.examSelection) && appState.examSelection.length === 3 &&
+          ['OFF-CSE-3', 'OFF-CSE-8', 'OFF-CSE-5'].every(id => appState.examSelection.includes(id)) &&
+          !(appState.customExams || []).length) appState.examSelection = [];
     } catch (e) {
       appState = createDefaultState();
     }
@@ -2935,37 +2939,72 @@ function renderGraduationAudit(metricsOverride = null) {
 // ============================================================================
 // TAB 9: VERSIONED EXAM ROUTINE & ICS/PNG EXPORT (SECTION 20)
 // ============================================================================
+// Official CSE/BSDS Fall 2026 exam-template slots (course code -> [day, slot]).
+const FALL_2026_EXAM_SLOTS = {
+  'ENG 1011':[1,1], 'CSE 4509':[1,1], 'GED 1005':[1,1], 'DS 4491':[1,1],
+  'ENG 1013':[1,2], 'CSE 4945':[1,2], 'DS 4217':[1,2], 'DS 3885':[1,2],
+  'MATH 2183':[1,3], 'CSE 3313':[1,3], 'DS 4211':[1,3], 'SOC 2101':[1,3], 'SOC 2102':[1,3], 'CSE 4889':[1,3], 'CSE 4813':[1,3], 'CSE 4125':[1,3],
+  'CSE 4621':[2,1], 'CSE 3521':[2,1], 'CSE 4325':[2,2], 'MATH 1151':[2,2], 'ACT 2111':[2,3], 'MATH 2205':[2,3],
+  'CSE 3811':[3,1], 'CSE 4451':[3,1], 'DS 4123':[3,1], 'CSE 2213':[3,2], 'CSE 469':[3,2], 'PMG 4101':[3,2], 'TEC 2499':[3,2],
+  'CSE 1325':[3,3], 'BIO 3105':[3,3], 'CSE 4777':[3,3],
+  'CSE 4611':[4,1], 'CSE 4883':[4,1], 'CSE 4327':[4,1], 'CSE 4811':[4,1], 'DS 4213':[4,1],
+  'CSE 1111':[4,2], 'CSE 2215':[4,2], 'DS 1501':[4,2], 'CSE 4435':[4,2], 'DS 2251':[4,2],
+  'CSE 3711':[4,3], 'DS 4523':[4,3], 'CSE 4893':[4,3], 'CSE 493':[4,3], 'DS 3101':[4,3],
+  'MATH 2201':[5,1], 'CSE 3411':[5,1], 'EEE 4261':[5,1], 'CSE 4511':[5,1], 'CSE 2217':[5,2], 'DS 1101':[5,2],
+  'CSE 3421':[5,3], 'CSE 4587':[5,3], 'CSE 4817':[5,3], 'DS 4817':[5,3], 'DS 3120':[5,3],
+  'BDS 1201':[6,1], 'ECO 4101':[6,1], 'DS 3521':[6,1], 'CSE 1115':[6,2], 'DS 1115':[6,2],
+  'EEE 2113':[6,3], 'EEE 2123':[6,3], 'CSE 4531':[6,3], 'CSE 4181':[6,3], 'CSE 4133':[6,3],
+  'CSE 4891':[7,1], 'DS 4891':[7,1], 'CSE 4165':[7,1], 'DS 4115':[7,1], 'CSE 2233':[7,2], 'DS 4229':[7,2], 'CSE 4399':[7,2],
+  'PHY 2105':[7,3], 'CSE 4495':[7,3], 'DS 3881':[7,3]
+};
+const FALL_2026_FINAL_ONLY = new Set(['CSE 4945','TEC 2499','CSE 4451','CSE 4893','CSE 493','EEE 4261','CSE 4587','CSE 4531','CSE 4181','CSE 4495']);
+const UIU_EXAM_SLOT_TIMES = {
+  Midterm: { T1:'9:00–11:00 AM', T2:'11:30 AM–1:30 PM', T3:'2:00–4:00 PM', T4:'time not listed in this template' },
+  Final: { T1:'9:00–11:00 AM', T2:'11:30 AM–1:30 PM', T3:'2:30–4:30 PM', T4:'time not listed in this template' }
+};
+
 function renderExamRoutine(metricsOverride = null) {
   const metrics = metricsOverride || computeAcademicMetrics();
   const examType = document.getElementById('exam-type-select').value || 'Midterm';
   const prog = metrics.program;
 
-  document.getElementById('exam-metadata-line').textContent =
-    `Active Program: ${prog.code} • Exam Type: ${examType} • Term: Fall 2026 • Source: Sample / User-Editable Dataset (Verified ${prog.lastVerified})`;
+  document.getElementById('exam-metadata-line').innerHTML =
+    `Active Program: ${prog.code} • Exam Type: ${examType} • Official CSE/BSDS Fall 2026 exam template • <a class="text-uiu-500 underline" href="https://ucam.uiu.ac.bd/Student/ExamRoutineViewer.aspx" target="_blank" rel="noopener noreferrer">Verify on UIU/UCAM</a>`;
 
-  const q = (document.getElementById('exam-search-input').value || '').trim().toLowerCase();
-  const avail = appState.offerings.filter(o =>
-    !q || o.code.toLowerCase().includes(q) || o.title.toLowerCase().includes(q)
-  );
+  const q = normalizeCourseCode(document.getElementById('exam-search-input').value || '');
+  const templateCourses = Object.entries(FALL_2026_EXAM_SLOTS)
+    .filter(([code]) => !q || normalizeCourseCode(code).includes(q))
+    .filter(([code]) => examType === 'Final' || !FALL_2026_FINAL_ONLY.has(code));
 
-  document.getElementById('exam-available-list').innerHTML = avail.map(o => {
-    const isSel = appState.examSelection.includes(o.id);
-    const dt = examType === 'Midterm' ? o.midExamDate : o.finalExamDate;
-    const tm = examType === 'Midterm' ? o.midExamTime : o.finalExamTime;
+  document.getElementById('exam-available-list').innerHTML = templateCourses.length ? templateCourses.map(([code, [day, slot]]) => {
+    const id = `template:${code}`;
+    const isSel = appState.examSelection.includes(id);
+    const course = metrics.classifiedCourses.find(c => normalizeCourseCode(c.code) === code)
+      || appState.offerings.find(o => normalizeCourseCode(o.code) === code);
+    const title = course?.title || course?.name || 'Course in official routine template';
     return `
       <div class="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-sm">
         <div>
-          <span class="font-mono font-bold">${o.code} (${o.section})</span> — <span>${o.title}</span>
-          <div class="text-xs text-slate-400 font-mono">${dt} • ${tm} • ${o.room}</div>
+          <span class="font-mono font-bold">${code}</span> — <span>${title}</span>
+          <div class="text-xs text-slate-400 font-mono">Day ${day} • T${slot} (${UIU_EXAM_SLOT_TIMES[examType][`T${slot}`]})</div>
         </div>
-        <button onclick="toggleExamCourseSelection('${o.id}')" class="px-2.5 py-1 rounded-lg font-bold text-sm ${isSel ? 'bg-rose-500 text-white' : 'bg-uiu-500 text-white'}">${isSel ? 'Remove' : '+ Add'}</button>
+        <button onclick="toggleExamCourseSelection('${id}')" class="px-2.5 py-1 rounded-lg font-bold text-sm ${isSel ? 'bg-rose-500 text-white' : 'bg-uiu-500 text-white'}">${isSel ? 'Remove' : '+ Add'}</button>
       </div>
     `;
-  }).join('');
+  }).join('') : `<p class="rounded-xl bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 p-3 text-xs text-slate-500">${q && examType === 'Midterm' && FALL_2026_FINAL_ONLY.has(q) ? 'This course is marked “Only Final Exam” in the template.' : q ? 'Course code is not listed in the CSE/BSDS Fall 2026 template. Check the official routine or use a custom entry.' : 'Start by searching a course code above.'}</p>`;
 
   // Build combined exam list
   const entries = [
     ...appState.examSelection.map(id => {
+      if (id.startsWith('template:')) {
+        const code = id.slice('template:'.length);
+        const slotData = FALL_2026_EXAM_SLOTS[code];
+        if (!slotData || (examType === 'Midterm' && FALL_2026_FINAL_ONLY.has(code))) return null;
+        const [day, slot] = slotData;
+        const course = metrics.classifiedCourses.find(c => normalizeCourseCode(c.code) === code)
+          || appState.offerings.find(o => normalizeCourseCode(o.code) === code);
+        return { id, code, title: course?.title || course?.name || 'Course in official routine template', section: '—', date: `Day ${day}`, time: `T${slot} (${UIU_EXAM_SLOT_TIMES[examType][`T${slot}`]})`, examDay: `Day ${day}`, examSlot: `T${slot}`, room: 'UIU', source: 'Official Fall 2026 CSE/BSDS template' };
+      }
       const o = appState.offerings.find(x => x.id === id);
       if (!o) return null;
       return {
@@ -2975,6 +3014,8 @@ function renderExamRoutine(metricsOverride = null) {
         section: o.section,
         date: examType === 'Midterm' ? o.midExamDate : o.finalExamDate,
         time: examType === 'Midterm' ? o.midExamTime : o.finalExamTime,
+        examDay: '',
+        examSlot: '',
         room: o.room,
         source: o.verificationStatus || 'Offering Dataset'
       };
@@ -2991,7 +3032,8 @@ function renderExamRoutine(metricsOverride = null) {
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i];
       const b = entries[j];
-      if (a.date === b.date && a.time === b.time) {
+      const sameDaySlot = a.examDay && a.examDay === b.examDay && a.examSlot && a.examSlot === b.examSlot && a.examSlot !== 'Slot TBA';
+      if (sameDaySlot || (a.date === b.date && a.time === b.time)) {
         clashCount++;
         alertsById[a.id] = `TIME CONFLICT with ${b.code}`;
         alertsById[b.id] = `TIME CONFLICT with ${a.code}`;
@@ -3029,8 +3071,8 @@ function renderExamRoutine(metricsOverride = null) {
     return `
       <tr>
         <td class="py-2.5 px-3"><strong class="font-mono">${e.code} (${e.section})</strong><div class="text-sm text-slate-500">${e.title}</div></td>
-        <td class="py-2.5 px-3 font-mono font-bold">${e.date}</td>
-        <td class="py-2.5 px-3 font-mono">${e.time}</td>
+        <td class="py-2.5 px-3 font-mono font-bold">${e.examDay || 'Day TBA'}${/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') ? `<div class="text-[11px] font-normal text-slate-500">${e.date}</div>` : ''}</td>
+        <td class="py-2.5 px-3 font-mono"><strong>${e.examSlot || 'Slot TBA'}</strong><div class="text-[11px] text-slate-500">${e.time || ''}</div></td>
         <td class="py-2.5 px-3">${e.room} <span class="block text-xs text-slate-400">${e.source}</span></td>
         <td class="py-2.5 px-3 font-bold ${al && al.includes('CONFLICT') ? 'text-rose-500' : al ? 'text-amber-500' : 'text-emerald-500'}">${al || 'Clear'}</td>
         <td class="py-2.5 px-3 text-right no-print">
@@ -3052,8 +3094,10 @@ function toggleExamCourseSelection(offId) {
 function addCustomExamSlot() {
   const code = normalizeCourseCode(document.getElementById('custom-exam-code').value || 'CSE 0000');
   const section = document.getElementById('custom-exam-sec').value.trim() || 'A';
-  const date = document.getElementById('custom-exam-date').value || '2026-12-06';
-  const time = document.getElementById('custom-exam-time').value.trim() || '09:30-11:30';
+  const day = Number(document.getElementById('custom-exam-day').value) || 1;
+  const slot = document.getElementById('custom-exam-slot').value || 'T1';
+  const date = `Day ${day}`;
+  const time = UIU_EXAM_SLOT_TIMES[document.getElementById('exam-type-select').value || 'Midterm'][slot];
   const room = document.getElementById('custom-exam-room').value.trim() || 'UIU Campus';
 
   appState.customExams.push({
@@ -3063,6 +3107,8 @@ function addCustomExamSlot() {
     section,
     date,
     time,
+    examDay: date,
+    examSlot: slot,
     room,
     source: 'User-entered'
   });
@@ -3103,10 +3149,11 @@ function generateIcsStringFromExams(entries, examType) {
 
 function exportExamRoutineIcs() {
   const examType = document.getElementById('exam-type-select').value || 'Midterm';
-  const entries = appState.examSelection.map(id => {
-    const o = appState.offerings.find(x => x.id === id);
-    return o ? { id: o.id, code: o.code, title: o.title, section: o.section, date: examType === 'Midterm' ? o.midExamDate : o.finalExamDate, time: o.midExamTime, room: o.room, source: o.verificationStatus } : null;
-  }).filter(Boolean).concat(appState.customExams || []);
+  const entries = (appState.customExams || []).filter(e => /^\d{4}-\d{2}-\d{2}$/.test(e.date || ''));
+  if (!entries.length) {
+    showToast('Day/slot templates do not include calendar dates, so there is nothing accurate to export as .ICS.', 'info');
+    return;
+  }
 
   const icsContent = generateIcsStringFromExams(entries, examType);
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
