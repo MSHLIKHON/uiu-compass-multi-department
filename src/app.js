@@ -1190,6 +1190,38 @@ Term   Course Code   Course Title                                Credits   Grade
   parseUcamRawText();
 }
 
+function detectUcamGrade(line, codeMatch, creditMatch) {
+  const known = new Set([...Object.keys(UIU_GRADES), 'W', 'I', 'RUNNING', 'PLANNED', 'REGISTERED', 'INPROGRESS', 'INCOMPLETE', 'WITHDRAWN']);
+  const normalize = value => value.trim().toUpperCase().replace(/[^A-Z+-]/g, '');
+  const codeEnd = codeMatch.index + codeMatch[0].length;
+  const searchStart = creditMatch ? creditMatch.index + creditMatch[0].length : codeEnd;
+  const tail = line.slice(Math.max(codeEnd, searchStart));
+
+  // UCAM table copy is often tab-separated. Read the rightmost exact grade/status
+  // cell, ignoring grade-point columns that may follow it.
+  const cells = line.split('\t').map(cell => cell.trim()).filter(Boolean);
+  for (let i = cells.length - 1; i >= 0; i--) {
+    const token = normalize(cells[i]);
+    if (known.has(token)) return normalizeUcamStatus(token);
+  }
+
+  // For plain-text rows, only inspect tokens after the credit column. This keeps
+  // title endings such as "English I" or "Course A" from becoming grades.
+  const tokens = tail.trim().split(/\s+/).filter(Boolean);
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const token = normalize(tokens[i]);
+    if (known.has(token)) return normalizeUcamStatus(token);
+  }
+  return 'UNKNOWN';
+}
+
+function normalizeUcamStatus(token) {
+  if (['RUNNING', 'REGISTERED', 'INPROGRESS'].includes(token)) return 'RUNNING';
+  if (token === 'WITHDRAWN') return 'W';
+  if (token === 'INCOMPLETE') return 'I';
+  return token;
+}
+
 function parseUcamRawText() {
   const raw = document.getElementById('ucam-paste-input').value.trim();
   const previewWrap = document.getElementById('ucam-parse-preview-container');
@@ -1225,18 +1257,7 @@ function parseUcamRawText() {
     const catalogCourse = currMap.get(code);
     const credits = crMatch ? parseFloat(crMatch[1]) : (catalogCourse ? catalogCourse.credits : 3.0);
 
-    // Detect grade or status at end of line
-    const afterCode = trimmed.slice(codeMatch.index + codeMatch[0].length);
-    let statusOrGrade = 'UNKNOWN';
-    if (/\b(Running|In\s*Progress|Registered|Taken)\b/i.test(afterCode)) {
-      statusOrGrade = 'RUNNING';
-    } else {
-      const tokens = afterCode.trim().split(/\s+/);
-      const lastTok = (tokens[tokens.length - 1] || '').toUpperCase().replace(/[^A-Z+-]/g, '');
-      if (UIU_GRADES[lastTok]) {
-        statusOrGrade = lastTok;
-      }
-    }
+    const statusOrGrade = detectUcamGrade(trimmed, codeMatch, crMatch);
 
     const warnings = [];
     if (!catalogCourse) warnings.push('Custom/Non-curriculum course');
@@ -1252,7 +1273,7 @@ function parseUcamRawText() {
       credits,
       term,
       attemptNo,
-      grade: statusOrGrade === 'UNKNOWN' ? 'A' : statusOrGrade,
+      grade: statusOrGrade,
       warnings
     });
   });
@@ -1281,7 +1302,7 @@ function renderUcamPreviewTable() {
       <td class="py-2 px-2.5 font-mono">#${r.attemptNo}</td>
       <td class="py-2 px-2.5">
         <select onchange="editUcamPreviewField(${i}, 'grade', this.value)" class="px-1.5 py-1 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold">
-          ${['A','A-','B+','B','B-','C+','C','C-','D+','D','F','W','I','RUNNING','PLANNED'].map(g => `<option value="${g}" ${r.grade === g ? 'selected' : ''}>${g}</option>`).join('')}
+          ${['UNKNOWN','A','A-','B+','B','B-','C+','C','C-','D+','D','F','W','I','RUNNING','PLANNED'].map(g => `<option value="${g}" ${r.grade === g ? 'selected' : ''}>${g === 'UNKNOWN' ? 'Select grade' : g}</option>`).join('')}
         </select>
       </td>
       <td class="py-2 px-2.5 text-xs ${r.warnings.length ? 'text-amber-500 font-semibold' : 'text-emerald-500'}">
@@ -1306,6 +1327,10 @@ function applyParsedUcamCourses() {
   const chosen = parsedUcamRows.filter(r => r.selected);
   if (chosen.length === 0) {
     showToast('No rows selected to import.', 'error');
+    return;
+  }
+  if (chosen.some(r => r.grade === 'UNKNOWN')) {
+    showToast('Select a grade for every checked row before importing.', 'error');
     return;
   }
   if (appState.isDemo) {
