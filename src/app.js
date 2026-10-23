@@ -2955,7 +2955,7 @@ function renderGraduationAudit(metricsOverride = null) {
 // ============================================================================
 // TAB 9: VERSIONED EXAM ROUTINE & ICS/PNG EXPORT (SECTION 20)
 // ============================================================================
-const UIU_EXAM_SLOT_TIMES = { T1:'Use current routine', T2:'Use current routine', T3:'Use current routine', T4:'Use current routine' };
+const UIU_EXAM_SLOT_TIMES = { T1:'9:00–11:00 AM', T2:'11:30 AM–1:30 PM', T3:'2:00–4:00 PM', T4:'Check official routine' };
 
 function detectPlannedExamConflicts(entries) {
   let clashCount = 0;
@@ -3058,12 +3058,15 @@ function renderExamRoutine(metricsOverride = null) {
   }))];
   entries.forEach(entry => {
     const code = normalizeCourseCode(entry.code || '');
-    if (!advisingCodes.includes(code)) return;
+    const isAdvisingCourse = advisingCodes.includes(code);
+    const isGenericPlanCourse = String(entry.id || '').startsWith('plan:');
+    if (!isAdvisingCourse && !isGenericPlanCourse) return;
     const manual = appState.advisingExamSlots?.[code] || {};
     const official = getOfficialAdvisingExamSlot(code);
-    entry.examDay = manual.day || official?.day || entry.examDay || '';
-    entry.examSlot = manual.slot || official?.slot || entry.examSlot || '';
-    if (manual.day || manual.slot) entry.source = 'Advising plan';
+    entry.examDay = (isAdvisingCourse && manual.day) || entry.examDay || official?.day || '';
+    entry.examSlot = (isAdvisingCourse && manual.slot) || entry.examSlot || official?.slot || '';
+    if (isAdvisingCourse && (manual.day || manual.slot)) entry.source = 'Advising plan';
+    else if (official?.day && (!entry.source || entry.source === 'Pre-advising plan')) entry.source = 'Official course routine';
   });
 
   // Detect same-slot clashes and same-day / consecutive-day alerts
@@ -3096,7 +3099,7 @@ function renderExamRoutine(metricsOverride = null) {
       <tr>
         <td class="py-2.5 px-3"><strong class="font-mono">${e.code} (${e.section})</strong><div class="text-sm text-slate-500">${e.title}</div></td>
         <td class="py-2.5 px-3 font-mono font-bold"><select onchange="setPlannedExamSlot('${e.id}', 'day', this.value)" aria-label="${e.code} exam day" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"><option value="">Day</option>${Array.from({length:7}, (_,i) => `<option value="Day ${i+1}" ${e.examDay === `Day ${i+1}` ? 'selected' : ''}>Day ${i+1}</option>`).join('')}</select>${/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') ? `<div class="text-[11px] font-normal text-slate-500">${e.date}</div>` : ''}</td>
-        <td class="py-2.5 px-3 font-mono"><select onchange="setPlannedExamSlot('${e.id}', 'slot', this.value)" aria-label="${e.code} exam time slot" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"><option value="">Slot</option>${['T1','T2','T3','T4'].map(slot => `<option value="${slot}" ${e.examSlot === slot ? 'selected' : ''}>${slot}</option>`).join('')}</select><div class="text-[11px] text-slate-500">${e.examSlot ? UIU_EXAM_SLOT_TIMES[e.examSlot] : 'Select from current routine'}</div></td>
+        <td class="py-2.5 px-3 font-mono"><select onchange="setPlannedExamSlot('${e.id}', 'slot', this.value)" aria-label="${e.code} exam time slot" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"><option value="">Slot</option>${['T1','T2','T3','T4'].map(slot => `<option value="${slot}" ${e.examSlot === slot ? 'selected' : ''}>${slot}</option>`).join('')}</select><div class="text-[11px] text-slate-500">${e.examSlot ? UIU_EXAM_SLOT_TIMES[e.examSlot] : 'No published slot — choose manually'}</div></td>
         <td class="py-2.5 px-3">${e.room} <span class="block text-xs text-slate-400">${e.source}</span></td>
         <td class="py-2.5 px-3 font-bold ${al && al.includes('CONFLICT') ? 'text-rose-500' : al ? 'text-amber-500' : 'text-emerald-500'}">${al || 'Clear'}</td>
         <td class="py-2.5 px-3 text-right no-print">
@@ -3115,7 +3118,8 @@ function toggleExamCourseSelection(offId) {
     else {
       const catalog = [...(appState.offerings || []), ...(DATA_BUNDLE.curricula || []).flatMap(c => c.courses || [])];
       const course = catalog.find(x => normalizeCourseCode(x.code || '') === code);
-      appState.customExams.push({ id: offId, code, title: course?.title || course?.name || 'Course', section: '—', date: '', time: '', examDay: '', examSlot: '', room: 'UIU', source: 'Pre-advising plan' });
+      const official = getOfficialAdvisingExamSlot(code);
+      appState.customExams.push({ id: offId, code, title: course?.title || course?.name || 'Course', section: '—', date: '', time: '', examDay: official?.day || '', examSlot: official?.slot || '', room: 'UIU', source: official?.day ? 'Official course routine' : 'Pre-advising plan' });
       appState.examSelection.push(offId);
     }
     if (existing) appState.examSelection = appState.examSelection.filter(id => id !== offId);
