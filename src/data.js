@@ -15,7 +15,7 @@ Promise.all([
     window.UIU_COMPASS_DATA = data;
     window.UIU_COMPASS_EXAM_ROUTINES = routines;
     const app = document.createElement('script');
-    app.src = new URL('./app.js?v=5500d4b', loaderScriptUrl).href;
+    app.src = new URL('./app.js?v=766beb0b', loaderScriptUrl).href;
     app.onerror = () => showDataError('The application script could not be loaded. Refresh the page and try again.');
     document.body.appendChild(app);
   })

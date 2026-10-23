@@ -3007,6 +3007,21 @@ function renderExamRoutine(metricsOverride = null) {
     `;
   }).join('') : `<p class="rounded-xl bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 p-3 text-xs text-slate-500">${q ? 'No matching course in your selected program. You can still add its code below.' : 'Type a course code to search your program catalog.'}</p>`;
 
+  // Resolve already-listed course codes before building the combined list.
+  // The advising rows are merged into `entries` below, so they cannot inspect
+  // `entries` while its array initializer is still running (TDZ).
+  const alreadyListedCodes = new Set([
+    ...(appState.examSelection || []).map(id => {
+      const planCode = id.startsWith('plan:') ? id.slice(5) : '';
+      if (planCode) return normalizeCourseCode(planCode);
+      const custom = (appState.customExams || []).find(x => x.id === id);
+      if (custom?.code) return normalizeCourseCode(custom.code);
+      const offering = (appState.offerings || []).find(x => x.id === id);
+      return normalizeCourseCode(offering?.code || id);
+    }),
+    ...(appState.customExams || []).map(exam => normalizeCourseCode(exam.code || ''))
+  ]);
+
   // Build combined exam list
   const entries = [
     ...appState.examSelection.map(id => {
@@ -3037,7 +3052,7 @@ function renderExamRoutine(metricsOverride = null) {
       return normalizeCourseCode(oldOffering?.code || id);
     }))].map(code => {
       const id = `advising:${code}`;
-      if (entries.some(entry => normalizeCourseCode(entry.code || '') === code)) return null;
+      if (alreadyListedCodes.has(code)) return null;
       const course = catalog.find(c => normalizeCourseCode(c.code || '') === code);
       if (!course) return null;
       const manual = appState.advisingExamSlots?.[code] || {};
