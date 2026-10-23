@@ -1,14 +1,24 @@
-const dataUrl = new URL('./data.json', document.currentScript.src);
-fetch(dataUrl)
+// Load the academic catalog once, then start the app as a classic script so
+// existing inline UI actions remain globally available.
+const loaderScriptUrl = document.currentScript.src;
+
+fetch(new URL('./data.json', loaderScriptUrl))
   .then((response) => {
-    if (!response.ok) throw new Error('Could not load UIU Compass data.');
+    if (!response.ok) throw new Error(`Academic data request failed (${response.status}).`);
     return response.json();
   })
   .then((data) => {
     window.UIU_COMPASS_DATA = data;
-    window.dispatchEvent(new Event('uiu-compass:data-ready'));
+    const app = document.createElement('script');
+    app.src = new URL('./app.js', loaderScriptUrl).href;
+    app.onerror = () => showDataError('The application script could not be loaded. Refresh the page and try again.');
+    document.body.appendChild(app);
   })
   .catch((error) => {
-    console.error(error);
-    document.body.innerHTML = '<main style="padding:2rem;font-family:sans-serif"><h1>Compass data could not load</h1><p>Run this project from a local web server and refresh.</p></main>';
+    console.error('UIU Compass could not load its academic data:', error);
+    showDataError('Academic data could not be loaded. Run the project from a local web server and refresh.');
   });
+
+function showDataError(message) {
+  document.body.innerHTML = `<main style="max-width:42rem;margin:4rem auto;padding:2rem;font:16px/1.6 system-ui,sans-serif"><h1>UIU Compass could not start</h1><p>${message}</p></main>`;
+}
