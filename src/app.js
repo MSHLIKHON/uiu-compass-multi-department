@@ -2,7 +2,7 @@
  * UIU COMPASS v2.0 — COMPLETE MULTI-DEPARTMENT ACADEMIC PLATFORM ENGINE
  * ============================================================================ */
 
-const DATA_BUNDLE = window.UIU_COMPASS_DATA;
+const DATA_BUNDLE = JSON.parse(document.getElementById('uiu-compass-data').textContent);
 const UIU_GRADES = DATA_BUNDLE.grades;
 const GRADE_KEYS = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
 const ALL_STATUS_KEYS = [...GRADE_KEYS, 'W', 'I', 'RUNNING', 'PLANNED', 'NOT_TAKEN'];
@@ -3712,8 +3712,5 @@ function showToast(message, type = 'info') {
   }, 3000);
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  if (window.UIU_COMPASS_DATA) initApp();
-  else window.addEventListener('uiu-compass:data-ready', initApp, { once: true });
-});
+initApp();
 
