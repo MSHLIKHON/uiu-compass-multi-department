@@ -40,6 +40,9 @@
       padding: 0.65rem 0.95rem !important;
       border-radius: 0.75rem 0.75rem 0 0;
     }
+    #main-tab-nav { cursor: grab; user-select: none; -webkit-user-select: none; }
+    #main-tab-nav.is-mouse-dragging { cursor: grabbing; scroll-behavior: auto; }
+    #main-tab-nav.is-mouse-dragging .nav-tab-btn { pointer-events: none; }
     .nav-tab-btn:hover {
       background: rgba(243, 112, 33, 0.08);
     }

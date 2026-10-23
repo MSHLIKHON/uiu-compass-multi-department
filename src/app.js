@@ -679,6 +679,7 @@ function computeAcademicMetrics() {
 // INITIALIZATION & TOP-LEVEL UI CONTROLLERS
 // ============================================================================
 function initApp() {
+  initMouseDraggableTabNav();
   const savedTheme = safeGetStorage(THEME_KEY) || 'dark';
   setTheme(savedTheme);
   applyUiFontScale(currentUiFontScale);
@@ -3028,8 +3029,42 @@ function renderExamRoutine(metricsOverride = null) {
         examSlot: planned?.examSlot || o.examSlot || ''
       };
     }).filter(Boolean),
-    ...(appState.customExams || []).filter(e => !e.id.startsWith('plan:') && !appState.examSelection.includes(e.id))
+    ...(appState.customExams || []).filter(e => !e.id.startsWith('plan:') && !appState.examSelection.includes(e.id)),
+    // Advising is the source of truth for selected courses; mirror its day/slot
+    // into this view so students can see and check conflicts without re-adding.
+    ...[...new Set((appState.advisingSelection || []).map(id => {
+      const oldOffering = (appState.offerings || []).find(o => o.id === id);
+      return normalizeCourseCode(oldOffering?.code || id);
+    }))].map(code => {
+      const id = `advising:${code}`;
+      if (entries.some(entry => normalizeCourseCode(entry.code || '') === code)) return null;
+      const course = catalog.find(c => normalizeCourseCode(c.code || '') === code);
+      if (!course) return null;
+      const manual = appState.advisingExamSlots?.[code] || {};
+      const official = getOfficialAdvisingExamSlot(code);
+      return {
+        id, code, title: course.title || course.name || 'Course', section: '—',
+        date: '', time: '', room: 'UIU', source: manual.day || manual.slot ? 'Advising plan' : official?.day ? 'Official course routine' : 'Advising plan',
+        examDay: manual.day || official?.day || '', examSlot: manual.slot || official?.slot || ''
+      };
+    }).filter(Boolean)
   ].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+
+  // If a course already exists in the routine list, prefer its Advising day/slot
+  // (or the official routine) so the two screens stay in sync without duplicates.
+  const advisingCodes = [...new Set((appState.advisingSelection || []).map(id => {
+    const oldOffering = (appState.offerings || []).find(o => o.id === id);
+    return normalizeCourseCode(oldOffering?.code || id);
+  }))];
+  entries.forEach(entry => {
+    const code = normalizeCourseCode(entry.code || '');
+    if (!advisingCodes.includes(code)) return;
+    const manual = appState.advisingExamSlots?.[code] || {};
+    const official = getOfficialAdvisingExamSlot(code);
+    entry.examDay = manual.day || official?.day || entry.examDay || '';
+    entry.examSlot = manual.slot || official?.slot || entry.examSlot || '';
+    if (manual.day || manual.slot) entry.source = 'Advising plan';
+  });
 
   // Detect same-slot clashes and same-day / consecutive-day alerts
   const { clashCount, sameDayCount, alertsById } = detectPlannedExamConflicts(entries);
@@ -3126,6 +3161,13 @@ function addCustomExamSlot() {
 }
 
 function removeExamSlot(id) {
+  if (id.startsWith('advising:')) {
+    const code = id.slice('advising:'.length);
+    appState.advisingSelection = (appState.advisingSelection || []).filter(item => normalizeCourseCode(item) !== code);
+    saveAppState();
+    refreshAllViews();
+    return;
+  }
   appState.examSelection = appState.examSelection.filter(x => x !== id);
   appState.customExams = (appState.customExams || []).filter(x => x.id !== id);
   saveAppState();
@@ -3133,6 +3175,15 @@ function removeExamSlot(id) {
 }
 
 function setPlannedExamSlot(id, field, value) {
+  if (id.startsWith('advising:')) {
+    const code = id.slice('advising:'.length);
+    if (!appState.advisingExamSlots) appState.advisingExamSlots = {};
+    if (!appState.advisingExamSlots[code]) appState.advisingExamSlots[code] = {};
+    appState.advisingExamSlots[code][field] = value;
+    saveAppState();
+    refreshAllViews();
+    return;
+  }
   const entry = (appState.customExams || []).find(x => x.id === id)
     || (appState.examSelection.includes(id) ? appState.offerings.find(x => x.id === id) : null);
   if (!entry) return;
@@ -3726,7 +3777,49 @@ function switchTab(tabId) {
   const activeBtn = document.getElementById(`tab-btn-${tabId}`);
   if (activeBtn) {
     activeBtn.className = 'nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-uiu-500 text-uiu-600 dark:text-uiu-400 whitespace-nowrap flex items-center gap-1.5 transition';
+    activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }
+}
+
+function initMouseDraggableTabNav() {
+  const nav = document.getElementById('main-tab-nav');
+  if (!nav) return;
+  let startX = 0;
+  let startScroll = 0;
+  let dragging = false;
+  let suppressClick = false;
+  nav.addEventListener('pointerdown', event => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    startX = event.clientX;
+    startScroll = nav.scrollLeft;
+    dragging = false;
+    nav.setPointerCapture(event.pointerId);
+  });
+  nav.addEventListener('pointermove', event => {
+    if (event.pointerType !== 'mouse' || !nav.hasPointerCapture(event.pointerId)) return;
+    const delta = event.clientX - startX;
+    if (!dragging && Math.abs(delta) > 5) {
+      dragging = true;
+      nav.classList.add('is-mouse-dragging');
+    }
+    if (dragging) nav.scrollLeft = startScroll - delta;
+  });
+  const finish = event => {
+    if (event.pointerType !== 'mouse') return;
+    if (dragging) {
+      suppressClick = true;
+      nav.classList.remove('is-mouse-dragging');
+      setTimeout(() => { suppressClick = false; }, 0);
+    }
+    dragging = false;
+  };
+  nav.addEventListener('pointerup', finish);
+  nav.addEventListener('pointercancel', finish);
+  nav.addEventListener('click', event => {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
 }
 
 function toggleLanguage() {
