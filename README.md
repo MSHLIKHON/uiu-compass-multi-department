@@ -1,11 +1,25 @@
 # UIU Compass — Multi-Department Academic Planning Platform
 
-Standalone HTML prototype for a multi-department academic planning experience.
+Standalone prototype organized into separate source files:
+
+- `index.html` — page structure and external library setup
+- `src/styles.css` — project-specific styles
+- `src/app.js` — interface behavior and calculations
+- `src/data.json` — programs, curricula, sample offerings and academic data
+- `src/data.js` — loads the data file before starting the app
 
 ## Run locally
 
-Open `index.html` in a modern browser. Some optional assets load from public CDNs, so an internet connection is needed for those assets.
+Because the app loads `src/data.json`, start a local static server from this folder. For example:
 
-## Important
+```sh
+python3 -m http.server 8000
+```
 
-This file is a product prototype. Review academic, curriculum, fee and course-offering data against current official UIU sources before using it for real advising.
+Then open <http://localhost:8000>.
+
+Some optional libraries and fonts load from public CDNs, so those features need an internet connection.
+
+## Academic data
+
+This is a prototype. Verify curriculum, fee, course offering and exam information against current official UIU sources before relying on it for academic decisions.
