@@ -3790,35 +3790,41 @@ function initMouseDraggableTabNav() {
   if (!nav) return;
   let startX = 0;
   let startScroll = 0;
+  let mouseDown = false;
   let dragging = false;
   let suppressClick = false;
-  nav.addEventListener('pointerdown', event => {
-    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+  nav.addEventListener('mousedown', event => {
+    if (event.button !== 0) return;
     startX = event.clientX;
     startScroll = nav.scrollLeft;
+    mouseDown = true;
     dragging = false;
-    nav.setPointerCapture(event.pointerId);
   });
-  nav.addEventListener('pointermove', event => {
-    if (event.pointerType !== 'mouse' || !nav.hasPointerCapture(event.pointerId)) return;
+  window.addEventListener('mousemove', event => {
+    if (!mouseDown || event.buttons !== 1) return;
     const delta = event.clientX - startX;
     if (!dragging && Math.abs(delta) > 5) {
       dragging = true;
       nav.classList.add('is-mouse-dragging');
     }
-    if (dragging) nav.scrollLeft = startScroll - delta;
+    if (dragging) {
+      event.preventDefault();
+      nav.scrollLeft = startScroll - delta;
+    }
   });
-  const finish = event => {
-    if (event.pointerType !== 'mouse') return;
+  const finish = () => {
     if (dragging) {
       suppressClick = true;
       nav.classList.remove('is-mouse-dragging');
-      setTimeout(() => { suppressClick = false; }, 0);
+      window.setTimeout(() => { suppressClick = false; }, 0);
     }
+    mouseDown = false;
     dragging = false;
+    startX = 0;
+    startScroll = nav.scrollLeft;
   };
-  nav.addEventListener('pointerup', finish);
-  nav.addEventListener('pointercancel', finish);
+  window.addEventListener('mouseup', finish);
+  window.addEventListener('blur', finish);
   nav.addEventListener('click', event => {
     if (!suppressClick) return;
     event.preventDefault();
