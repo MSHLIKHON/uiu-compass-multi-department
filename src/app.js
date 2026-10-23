@@ -134,16 +134,9 @@ function createDefaultState() {
     courseHistory: {}, // code -> [{ grade, term, credits, title }]
     customCourses: {}, // curriculumId -> [courseObj]
     offerings: [...DATA_BUNDLE.sampleOfferings],
-    advisingSelection: ['OFF-CSE-3', 'OFF-CSE-4', 'OFF-CSE-8', 'OFF-CSE-9'], // offeringIds or courseCodes
-    savedAdvisingPlans: [
-      {
-        id: 'plan-default-1',
-        name: 'Balanced Core Plan (10.0 Cr)',
-        programId: 'CSE',
-        items: ['OFF-CSE-3', 'OFF-CSE-4', 'OFF-CSE-9', 'OFF-CSE-10'],
-        createdAt: '2026-10-23'
-      }
-    ],
+    advisingSelection: [], // course codes, independent of trimester offerings
+    advisingExamSlots: {}, // course code -> { day, slot }
+    savedAdvisingPlans: [],
     savedCgpaScenarios: [
       { id: 'sc-1', name: 'Dean List Push (30 Cr @ 3.75)', targetCgpa: 3.50, futureCredits: 30, reqGpa: 3.62 }
     ],
@@ -700,6 +693,20 @@ function initApp() {
       if (Array.isArray(appState.examSelection) && appState.examSelection.length === 3 &&
           ['OFF-CSE-3', 'OFF-CSE-8', 'OFF-CSE-5'].every(id => appState.examSelection.includes(id)) &&
           !(appState.customExams || []).length) appState.examSelection = [];
+      if (Array.isArray(appState.advisingSelection) && appState.advisingSelection.length === 4 &&
+          ['OFF-CSE-3', 'OFF-CSE-4', 'OFF-CSE-8', 'OFF-CSE-9'].every(id => appState.advisingSelection.includes(id))) {
+        appState.advisingSelection = [];
+        appState.advisingExamSlots = {};
+      }
+      if (Array.isArray(appState.savedAdvisingPlans)) {
+        appState.savedAdvisingPlans = appState.savedAdvisingPlans.filter(plan => plan.id !== 'plan-default-1');
+      }
+      const oldOfferingCode = id => appState.offerings.find(o => o.id === id)?.code || id;
+      appState.advisingSelection = [...new Set((appState.advisingSelection || []).map(oldOfferingCode))];
+      appState.savedAdvisingPlans = (appState.savedAdvisingPlans || []).map(plan => ({
+        ...plan,
+        items: [...new Set((plan.items || []).map(oldOfferingCode))]
+      }));
     } catch (e) {
       appState = createDefaultState();
     }
@@ -1759,47 +1766,31 @@ function saveCustomCurriculumCourse() {
 // ============================================================================
 // TAB 4: COURSE OFFERINGS & ADVISING PLANNER (SECTIONS 21, 22, 23)
 // ============================================================================
-function timeToMinutes(tStr) {
-  const m = String(tStr || '').trim().match(/^(\d{1,2}):(\d{2})/);
-  if (!m) return 0;
-  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-}
-
-function rangesOverlap(startA, endA, startB, endB) {
-  return Math.max(startA, startB) < Math.min(endA, endB);
-}
-
-function detectAdvisingConflicts(selectedOfferingObjs) {
-  const classConflicts = [];
+function detectAdvisingConflicts(selectedCourses) {
   const examConflicts = [];
+  const sameDayWarnings = [];
   const duplicateCourses = [];
 
   const seenCodes = new Set();
-  selectedOfferingObjs.forEach(o => {
+  selectedCourses.forEach(o => {
     if (seenCodes.has(o.code)) duplicateCourses.push(o.code);
     seenCodes.add(o.code);
   });
 
-  for (let i = 0; i < selectedOfferingObjs.length; i++) {
-    for (let j = i + 1; j < selectedOfferingObjs.length; j++) {
-      const a = selectedOfferingObjs[i];
-      const b = selectedOfferingObjs[j];
-      const sharedDays = (a.days || []).filter(d => (b.days || []).includes(d));
-      if (sharedDays.length > 0) {
-        if (rangesOverlap(timeToMinutes(a.startTime), timeToMinutes(a.endTime), timeToMinutes(b.startTime), timeToMinutes(b.endTime))) {
-          classConflicts.push(`${a.code} (${a.section}) & ${b.code} (${b.section}) overlap on ${sharedDays.join('/')} (${a.startTime}-${a.endTime})`);
-        }
-      }
-      if (a.midExamDate && b.midExamDate && a.midExamDate === b.midExamDate && a.midExamTime === b.midExamTime) {
-        examConflicts.push(`Midterm clash: ${a.code} & ${b.code} on ${a.midExamDate} (${a.midExamTime})`);
-      }
-      if (a.finalExamDate && b.finalExamDate && a.finalExamDate === b.finalExamDate && a.finalExamTime === b.finalExamTime) {
-        examConflicts.push(`Final exam clash: ${a.code} & ${b.code} on ${a.finalExamDate} (${a.finalExamTime})`);
+  for (let i = 0; i < selectedCourses.length; i++) {
+    for (let j = i + 1; j < selectedCourses.length; j++) {
+      const a = selectedCourses[i];
+      const b = selectedCourses[j];
+      if (!a.examDay || !b.examDay || a.examDay !== b.examDay) continue;
+      if (a.examSlot && b.examSlot && a.examSlot === b.examSlot) {
+        examConflicts.push(`TIME CONFLICT: ${a.code} & ${b.code} on ${a.examDay}, ${a.examSlot}`);
+      } else {
+        sameDayWarnings.push(`Same exam day: ${a.code} & ${b.code} on ${a.examDay}; verify their slots`);
       }
     }
   }
 
-  return { classConflicts, examConflicts, duplicateCourses };
+  return { classConflicts: [], examConflicts, sameDayWarnings, duplicateCourses };
 }
 
 function renderAdvising(metricsOverride = null) {
@@ -1853,32 +1844,28 @@ function renderAdvising(metricsOverride = null) {
     </div>
   `).join('');
 
-  // Render Offerings Catalog
+  // Render the selected curriculum, independent of term-specific section schedules.
   const searchQ = (document.getElementById('advising-search').value || '').trim().toLowerCase();
-  const progOfferings = appState.offerings.filter(o => o.programId === program.id || !searchQ);
-  const filteredOfferings = progOfferings.filter(o =>
-    !searchQ || o.code.toLowerCase().includes(searchQ) || o.title.toLowerCase().includes(searchQ)
-  );
-
   const courseMap = new Map();
   classifiedCourses.forEach(c => courseMap.set(c.code, c));
+  const filteredCourses = classifiedCourses.filter(c =>
+    !searchQ || c.code.toLowerCase().includes(searchQ) || c.title.toLowerCase().includes(searchQ)
+  );
 
-  document.getElementById('advising-offerings-list').innerHTML = filteredOfferings.map(o => {
-    const isSel = appState.advisingSelection.includes(o.id);
-    const cInfo = courseMap.get(o.code);
-    const stLabel = cInfo ? cInfo.academicStatus : 'ELIGIBLE';
+  document.getElementById('advising-offerings-list').innerHTML = filteredCourses.map(c => {
+    const isSel = appState.advisingSelection.includes(c.code);
+    const stLabel = c.academicStatus || 'ELIGIBLE';
     return `
       <div class="p-3 rounded-2xl border ${isSel ? 'border-uiu-500 bg-uiu-500/10' : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40'} flex items-center justify-between gap-2 text-sm">
         <div>
           <div class="flex items-center gap-2">
-            <span class="font-mono font-bold text-slate-900 dark:text-white">${o.code} (Sec ${o.section})</span>
-            <span class="px-1.5 py-0.2 rounded text-xs bg-slate-200 dark:bg-slate-700 font-mono">${(cInfo ? cInfo.credits : 3).toFixed(1)} Cr</span>
+            <span class="font-mono font-bold text-slate-900 dark:text-white">${c.code}</span>
+            <span class="px-1.5 py-0.2 rounded text-xs bg-slate-200 dark:bg-slate-700 font-mono">${c.credits.toFixed(1)} Cr</span>
             <span class="text-xs font-bold text-emerald-500">${stLabel}</span>
           </div>
-          <div class="text-sm text-slate-600 dark:text-slate-300 font-medium">${o.title}</div>
-          <div class="text-xs text-slate-400 font-mono">${(o.days || []).join(', ')} ${o.startTime}-${o.endTime} • ${o.room} • Mid: ${o.midExamDate || 'TBA'}</div>
+          <div class="text-sm text-slate-600 dark:text-slate-300 font-medium">${c.title}</div>
         </div>
-        <button onclick="toggleAdvisingOffering('${o.id}')" class="px-3 py-1.5 rounded-xl font-bold text-sm ${isSel ? 'bg-rose-500 text-white' : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'}">
+        <button onclick="toggleAdvisingOffering('${c.code}')" class="px-3 py-1.5 rounded-xl font-bold text-sm ${isSel ? 'bg-rose-500 text-white' : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'}">
           ${isSel ? 'Remove' : '+ Add'}
         </button>
       </div>
@@ -1886,17 +1873,15 @@ function renderAdvising(metricsOverride = null) {
   }).join('');
 
   // Selected Advising Worksheet & Diagnostics
-  const selectedObjs = appState.advisingSelection.map(id => {
-    const off = appState.offerings.find(o => o.id === id);
-    if (off) {
-      const c = courseMap.get(off.code);
-      return { ...off, credits: c ? c.credits : 3.0, courseMeta: c };
-    }
-    const c = courseMap.get(id);
-    if (c) {
-      return { id: c.code, code: c.code, title: c.title, section: 'Custom', days: [], startTime: 'TBA', endTime: 'TBA', credits: c.credits, courseMeta: c };
-    }
-    return null;
+  const selectedCodes = [...new Set(appState.advisingSelection.map(id => {
+    const oldOffering = appState.offerings.find(o => o.id === id);
+    return oldOffering ? oldOffering.code : id;
+  }))];
+  const selectedObjs = selectedCodes.map(code => {
+    const c = courseMap.get(code);
+    if (!c) return null;
+    const examSlot = appState.advisingExamSlots?.[code] || {};
+    return { id: code, code, title: c.title, examDay: examSlot.day || '', examSlot: examSlot.slot || '', credits: c.credits, courseMeta: c };
   }).filter(Boolean);
 
   const selectedCr = selectedObjs.reduce((s, o) => s + o.credits, 0);
@@ -1960,21 +1945,25 @@ function renderAdvising(metricsOverride = null) {
   } else {
     selListEl.innerHTML = selectedObjs.map(o => `
       <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-sm">
-        <div>
-          <span class="font-mono font-bold">${o.code} (${o.section})</span> • <span>${o.title}</span>
-          <div class="text-xs text-slate-400 font-mono">${(o.days || []).join('/')} ${o.startTime}-${o.endTime} • ${o.credits} Cr</div>
+        <div class="min-w-0 flex-1">
+          <span class="font-mono font-bold">${o.code}</span> • <span>${o.title}</span>
+          <div class="text-xs text-slate-400 font-mono">${o.credits} Cr</div>
         </div>
-        <button onclick="toggleAdvisingOffering('${o.id}')" class="text-rose-500 hover:underline font-bold">Remove</button>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <select onchange="setAdvisingExamSlot('${o.code}', 'day', this.value)" aria-label="${o.code} exam day" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"><option value="">Day</option>${Array.from({length:7}, (_,i) => `<option value="Day ${i+1}" ${o.examDay === `Day ${i+1}` ? 'selected' : ''}>Day ${i+1}</option>`).join('')}</select>
+          <select onchange="setAdvisingExamSlot('${o.code}', 'slot', this.value)" aria-label="${o.code} exam slot" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"><option value="">T-slot</option>${['T1','T2','T3','T4'].map(slot => `<option value="${slot}" ${o.examSlot === slot ? 'selected' : ''}>${slot}</option>`).join('')}</select>
+          <button onclick="toggleAdvisingOffering('${o.code}')" class="text-rose-500 hover:underline font-bold">Remove</button>
+        </div>
       </div>
     `).join('');
   }
 
-  const allAlerts = [...conflicts.classConflicts, ...conflicts.examConflicts, ...prereqWarnings, ...coreqWarnings];
+  const allAlerts = [...conflicts.examConflicts, ...conflicts.sameDayWarnings, ...conflicts.duplicateCourses.map(code => `Duplicate course selected: ${code}`), ...prereqWarnings, ...coreqWarnings];
   const diagBox = document.getElementById('advising-diagnostics-box');
   if (allAlerts.length === 0) {
-    diagBox.innerHTML = `<div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>No class conflicts, exam clashes, or missing prerequisites detected!</div>`;
+    diagBox.innerHTML = `<div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>No exam-slot conflicts or missing prerequisites detected.</div>`;
   } else {
-    diagBox.innerHTML = allAlerts.map(a => `<div class="p-2 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 text-sm font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${a}</div>`).join('');
+    diagBox.innerHTML = allAlerts.map(a => `<div class="p-2 rounded-xl ${a.startsWith('TIME CONFLICT') ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'} text-sm font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${a}</div>`).join('');
   }
 
   // Render Saved Advising Plans
@@ -1995,26 +1984,29 @@ function renderAdvising(metricsOverride = null) {
 }
 
 function toggleAdvisingOffering(id) {
-  const idx = appState.advisingSelection.indexOf(id);
+  const code = appState.offerings.find(o => o.id === id)?.code || normalizeCourseCode(id);
+  const idx = appState.advisingSelection.indexOf(code);
   if (idx >= 0) appState.advisingSelection.splice(idx, 1);
-  else appState.advisingSelection.push(id);
-  // Automatically connect advising selection to exam routine & fee calculator
-  if (!appState.examSelection.includes(id) && idx < 0) {
-    appState.examSelection.push(id);
-  }
+  else appState.advisingSelection.push(code);
   saveAppState();
   refreshAllViews();
 }
 
 function toggleAdvisingByCourseCode(code) {
-  const matchingOff = appState.offerings.find(o => o.code === code);
-  const targetId = matchingOff ? matchingOff.id : code;
-  if (!appState.advisingSelection.includes(targetId)) {
-    appState.advisingSelection.push(targetId);
-  }
+  const normalizedCode = normalizeCourseCode(code);
+  if (!appState.advisingSelection.includes(normalizedCode)) appState.advisingSelection.push(normalizedCode);
   saveAppState();
   refreshAllViews();
-  showToast(`Added ${code} to Advising Plan!`, 'success');
+  showToast(`Added ${normalizedCode} to Advising Plan!`, 'success');
+}
+
+function setAdvisingExamSlot(code, field, value) {
+  if (!appState.advisingExamSlots) appState.advisingExamSlots = {};
+  if (!appState.advisingExamSlots[code]) appState.advisingExamSlots[code] = {};
+  if (field === 'day') appState.advisingExamSlots[code].day = value;
+  if (field === 'slot') appState.advisingExamSlots[code].slot = value;
+  saveAppState();
+  renderAdvising();
 }
 
 function clearAdvisingSelection() {
@@ -2031,6 +2023,7 @@ function saveCurrentAdvisingPlan() {
     name,
     programId: appState.profile.programId,
     items: [...appState.advisingSelection],
+    examSlots: structuredClone(appState.advisingExamSlots || {}),
     createdAt: new Date().toISOString().slice(0, 10)
   });
   nameInput.value = '';
@@ -2043,6 +2036,7 @@ function loadSavedAdvisingPlan(planId) {
   const found = appState.savedAdvisingPlans.find(p => p.id === planId);
   if (!found) return;
   appState.advisingSelection = [...found.items];
+  if (found.examSlots) appState.advisingExamSlots = structuredClone(found.examSlots);
   saveAppState();
   refreshAllViews();
   showToast(`Loaded advising plan: ${found.name}`, 'info');
@@ -3646,13 +3640,15 @@ function runBuiltInUnitTests() {
     const mig = migrateLegacyV1Data({ 'CSE 1111': 'A', 'ENG 1011': 'B+' });
     return mig.migratedFromV1 && mig.profile.degreeCredits === 141 && mig.courseHistory['CSE 1111'][0].grade === 'A';
   });
-  // 12. Class & Exam conflict detection
-  assertTest('12. Schedule conflict engine detects overlapping class & exam slots', () => {
+  // 12. Advising checks student-entered exam slots without trimester dates
+  assertTest('12. Generic advising flags matching day + exam slot and warns for same-day different slots', () => {
     const conf = detectAdvisingConflicts([
-      { code: 'CSE 3411', section: 'A', days: ['Sun'], startTime: '10:30', endTime: '11:50', midExamDate: '2026-12-07', midExamTime: '09:30-11:30' },
-      { code: 'CSE 4165', section: 'B', days: ['Sun'], startTime: '10:30', endTime: '11:50', midExamDate: '2026-12-07', midExamTime: '09:30-11:30' }
+      { code: 'CSE 3411', examDay: 'Day 2', examSlot: 'T3' },
+      { code: 'CSE 4165', examDay: 'Day 2', examSlot: 'T3' },
+      { code: 'MATH 1151', examDay: 'Day 2', examSlot: 'T4' }
     ]);
-    return conf.classConflicts.length === 1 && conf.examConflicts.length === 1;
+    return conf.classConflicts.length === 0 && conf.examConflicts.length === 1 &&
+      conf.sameDayWarnings.length === 2 && conf.examConflicts[0].includes('Day 2, T3');
   });
   assertTest('15. Generic pre-advising flags only matching day + slot as a clash', () => {
     const entries = [

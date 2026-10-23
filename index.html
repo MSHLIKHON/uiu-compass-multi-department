@@ -842,11 +842,14 @@
             <div id="advising-suggestions-list" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
           </div>
 
-          <!-- Current Course Offerings Search & Selection -->
+          <!-- Generic Curriculum Course Search & Selection -->
           <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-lg font-bold">Offered Sections &amp; Curriculum Course Selector</h3>
-              <input id="advising-search" type="text" oninput="renderAdvising()" placeholder="Search offered course or section..." aria-label="Search offered courses" class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm" />
+              <div>
+                <h3 class="text-lg font-bold">Curriculum Course Selector</h3>
+                <p class="text-xs text-slate-500">This list is term-independent. Assign exam day and slot from the current routine below.</p>
+              </div>
+              <input id="advising-search" type="text" oninput="renderAdvising()" placeholder="Search course code or title..." aria-label="Search curriculum courses" class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm" />
             </div>
             <div id="advising-offerings-list" class="space-y-2.5 max-h-96 overflow-y-auto pr-1"></div>
           </div>
