@@ -1,4 +1,5 @@
-fetch(new URL('./data.json', import.meta.url))
+const dataUrl = new URL('./data.json', document.currentScript.src);
+fetch(dataUrl)
   .then((response) => {
     if (!response.ok) throw new Error('Could not load UIU Compass data.');
     return response.json();
