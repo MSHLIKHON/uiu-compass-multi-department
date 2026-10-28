@@ -260,9 +260,9 @@ function normalizeCourseCode(rawCode) {
 }
 
 // Resolves a course's effective status & grade from attempt history according to UIU retake policy
-function resolveCourseRecord(code, retakePolicyOverride = null) {
+function resolveCourseRecord(code, retakePolicyOverride = null, attemptsOverride = null) {
   const policy = retakePolicyOverride || appState.profile.retakePolicy || 'highest';
-  const attempts = appState.courseHistory[code] || [];
+  const attempts = attemptsOverride || appState.courseHistory[code] || [];
   if (attempts.length === 0) {
     return { status: 'NOT_TAKEN', grade: null, point: null, attempts: [], isRetake: false, isWaived: false };
   }
@@ -460,7 +460,7 @@ function computeAcademicMetrics() {
   const curr = getActiveCurriculum();
   const prog = getActiveProgram();
   const reqDegreeCredits = getEffectiveDegreeCredits();
-  const policy = appState.profile.retakePolicy || 'latest';
+  const policy = appState.profile.retakePolicy || 'highest';
 
   const currCourseMap = new Map();
   const unlocksMap = new Map();
@@ -759,6 +759,10 @@ function initApp() {
         ...plan,
         items: [...new Set((plan.items || []).map(oldOfferingCode))]
       }));
+      // Normalize retakePolicy to UIU official standard if legacy 'all' was stored
+      if (appState.profile && (appState.profile.retakePolicy === 'all' || !appState.profile.retakePolicy)) {
+        appState.profile.retakePolicy = 'highest';
+      }
     } catch (e) {
       appState = createDefaultState();
     }
@@ -833,7 +837,7 @@ function syncSetupInputsFromState() {
   document.getElementById('pace-breaks-input').value = p.studyBreaks;
   document.getElementById('pace-avgload-input').value = p.avgCreditsPerTerm;
   document.getElementById('pace-transfer-input').value = p.transferCredits;
-  document.getElementById('retake-policy-select').value = p.retakePolicy || 'latest';
+  document.getElementById('retake-policy-select').value = p.retakePolicy || 'highest';
 
   // Sync Fee defaults for active program
   const prog = getActiveProgram();
@@ -1641,15 +1645,65 @@ function parseUcamRawText() {
   renderUcamPreviewTable();
 }
 
+function getUcamParsedSummaryStats() {
+  const chosen = parsedUcamRows.filter(r => r.selected);
+  const droppedCount = parsedUcamRows.filter(r => r.grade === 'DROPPED').length;
+
+  const grouped = {};
+  chosen.forEach(r => {
+    if (r.grade === 'DROPPED') return;
+    if (!grouped[r.code]) grouped[r.code] = [];
+    grouped[r.code].push(r);
+  });
+
+  let completedCredits = 0;
+  let runningCredits = 0;
+
+  Object.keys(grouped).forEach(code => {
+    const attempts = grouped[code];
+    const rec = resolveCourseRecord(code, 'highest', attempts);
+    const cr = attempts[attempts.length - 1].credits || 3.0;
+    if (rec.status === 'COMPLETED') {
+      completedCredits += cr;
+    } else if (rec.status === 'RUNNING') {
+      runningCredits += cr;
+    }
+  });
+
+  return {
+    totalRows: parsedUcamRows.length,
+    selectedRows: chosen.length,
+    completedCredits,
+    runningCredits,
+    droppedCount
+  };
+}
+
+function updateUcamSummaryStatsOnly() {
+  const summaryEl = document.getElementById('ucam-parse-summary');
+  if (!summaryEl || parsedUcamRows.length === 0) return;
+  const stats = getUcamParsedSummaryStats();
+  summaryEl.innerHTML = `
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <span class="font-bold text-slate-700 dark:text-slate-200">Detected ${stats.totalRows} Rows:</span>
+      <span class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-bold">${stats.completedCredits.toFixed(1)} Completed Cr</span>
+      <span class="px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-400 font-mono font-bold">${stats.runningCredits.toFixed(1)} Running Cr</span>
+      ${stats.droppedCount > 0 ? `<span class="px-2 py-0.5 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 font-mono font-semibold">${stats.droppedCount} Dropped (Excluded)</span>` : ''}
+    </div>
+  `;
+}
+
 function renderUcamPreviewTable() {
   const summaryEl = document.getElementById('ucam-parse-summary');
   const tbody = document.getElementById('ucam-parse-tbody');
-  summaryEl.textContent = `Detected ${parsedUcamRows.length} Course Row(s) • Review & Edit Before Import`;
 
   if (parsedUcamRows.length === 0) {
+    summaryEl.textContent = 'Detected 0 Course Rows';
     tbody.innerHTML = `<tr><td colspan="8" class="py-4 px-3 text-center text-slate-400">No recognizable course rows found. Ensure text includes a course code (e.g. CSE 1111) and grade.</td></tr>`;
     return;
   }
+
+  updateUcamSummaryStatsOnly();
 
   tbody.innerHTML = parsedUcamRows.map((r, i) => `
     <tr>
@@ -1673,6 +1727,7 @@ function renderUcamPreviewTable() {
 
 function toggleUcamPreviewRow(idx, checked) {
   if (parsedUcamRows[idx]) parsedUcamRows[idx].selected = checked;
+  updateUcamSummaryStatsOnly();
 }
 
 function editUcamPreviewField(idx, field, val) {
@@ -1686,6 +1741,7 @@ function editUcamPreviewField(idx, field, val) {
       else if (val !== 'UNKNOWN') parsedUcamRows[idx].selected = true;
     }
   }
+  updateUcamSummaryStatsOnly();
 }
 
 function applyParsedUcamCourses() {
@@ -1698,7 +1754,11 @@ function applyParsedUcamCourses() {
     showToast('Select a grade for every checked row before importing.', 'error');
     return;
   }
-  if (appState.isDemo) {
+
+  const replaceEl = document.getElementById('ucam-replace-records');
+  const shouldReplace = replaceEl ? replaceEl.checked : true;
+
+  if (shouldReplace || appState.isDemo) {
     appState.isDemo = false;
     appState.courseHistory = {};
   }
@@ -1731,6 +1791,16 @@ function applyParsedUcamCourses() {
   syncSetupInputsFromState();
   refreshAllViews();
   showToast(`Imported ${chosen.length} course attempt(s) into your academic record!`, 'success');
+}
+
+function clearAllCourseHistory() {
+  if (confirm('Are you sure you want to clear all recorded courses? This will reset your academic records so you can start fresh.')) {
+    appState.courseHistory = {};
+    appState.isDemo = false;
+    saveAppState();
+    refreshAllViews();
+    showToast('Cleared all academic records.', 'info');
+  }
 }
 
 function addManualCourseAttempt() {
