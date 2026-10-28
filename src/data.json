@@ -91,6 +91,20 @@
       "label": "Incomplete",
       "bnLabel": "অসম্পূর্ণ",
       "color": "purple"
+    },
+    "WAIVED": {
+      "point": null,
+      "marks": "Waived / Transfer / Exemption",
+      "label": "Waived / Transfer",
+      "bnLabel": "মওকুফ / ট্রান্সফার",
+      "color": "teal"
+    },
+    "S": {
+      "point": null,
+      "marks": "Satisfactory (Non-credit)",
+      "label": "Satisfactory",
+      "bnLabel": "সন্তোষজনক",
+      "color": "teal"
     }
   },
   "programs": [

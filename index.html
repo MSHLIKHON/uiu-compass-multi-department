@@ -655,6 +655,8 @@
                   <option value="D+">Grade D+ (1.33)</option>
                   <option value="D">Grade D (1.00)</option>
                   <option value="F">Failed — F (0.00)</option>
+                  <option value="WAIVED">Waived / Transfer / Exempted (Earns Credit, Non-GPA)</option>
+                  <option value="S">Satisfactory — S (Non-credit Pass)</option>
                   <option value="W">Withdrawn — W</option>
                   <option value="I">Incomplete — I</option>
                   <option value="RUNNING">Running (In Progress)</option>
@@ -1035,9 +1037,9 @@
           <div class="flex flex-wrap items-center gap-2">
             <label for="retake-policy-select" class="text-sm font-bold text-slate-500">Transcript Counting Rule:</label>
             <select id="retake-policy-select" onchange="updateRetakePolicy(this.value)" class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold">
-              <option value="latest">Latest Attempt Replaces Previous (Standard)</option>
-              <option value="highest">Highest Attempt Grade Counted</option>
-              <option value="all">Average All Attempts (Cumulative)</option>
+              <option value="highest">Highest / Better Grade Replaces (UIU Official Policy)</option>
+              <option value="latest">Latest Graded Attempt Replaces</option>
+              <option value="all">Average All Attempts (Historical Audit)</option>
             </select>
           </div>
         </div>

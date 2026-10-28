@@ -6,7 +6,7 @@ const DATA_BUNDLE = window.UIU_COMPASS_DATA;
 const EXAM_ROUTINES = window.UIU_COMPASS_EXAM_ROUTINES || {};
 const UIU_GRADES = DATA_BUNDLE.grades;
 const GRADE_KEYS = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
-const ALL_STATUS_KEYS = [...GRADE_KEYS, 'W', 'I', 'RUNNING', 'PLANNED', 'NOT_TAKEN'];
+const ALL_STATUS_KEYS = [...GRADE_KEYS, 'WAIVED', 'S', 'W', 'I', 'RUNNING', 'PLANNED', 'NOT_TAKEN'];
 const PROGRAMS = DATA_BUNDLE.programs;
 const CURRICULA = DATA_BUNDLE.curricula;
 
@@ -129,7 +129,7 @@ function createDefaultState() {
       studyBreaks: 0,
       avgCreditsPerTerm: 12.0,
       transferCredits: 0.0,
-      retakePolicy: 'latest', // 'latest' | 'highest' | 'all'
+      retakePolicy: 'highest', // 'highest' (UIU Official standard: higher grade replaces) | 'latest' | 'all'
       customTuitionOverride: null
     },
     courseHistory: {}, // code -> [{ grade, term, credits, title }]
@@ -253,67 +253,92 @@ function getEffectiveDegreeCredits() {
 }
 
 function normalizeCourseCode(rawCode) {
-  const cleaned = String(rawCode || '').trim().toUpperCase().replace(/\s+/g, ' ');
-  const m = cleaned.match(/^([A-Z]{2,4})\s*-?\s*(\d{4}[A-Z]?)$/);
+  const cleaned = String(rawCode || '').trim().toUpperCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ');
+  const m = cleaned.match(/^([A-Z]{2,5})\s*(\d{3,4}[A-Z]?)$/);
   if (m) return `${m[1]} ${m[2]}`;
   return cleaned;
 }
 
-// Resolves a course's effective status & grade from attempt history according to retakePolicy
+// Resolves a course's effective status & grade from attempt history according to UIU retake policy
 function resolveCourseRecord(code, retakePolicyOverride = null) {
-  const policy = retakePolicyOverride || appState.profile.retakePolicy || 'latest';
+  const policy = retakePolicyOverride || appState.profile.retakePolicy || 'highest';
   const attempts = appState.courseHistory[code] || [];
   if (attempts.length === 0) {
-    return { status: 'NOT_TAKEN', grade: null, point: null, attempts: [], isRetake: false };
+    return { status: 'NOT_TAKEN', grade: null, point: null, attempts: [], isRetake: false, isWaived: false };
   }
+
+  const isWaivedGrade = g => ['WAIVED', 'EXEMPTED', 'TRANSFER', 'S'].includes(String(g || '').toUpperCase());
+  const isRunningGrade = g => ['RUNNING', 'REGISTERED', 'INPROGRESS'].includes(String(g || '').toUpperCase());
+  const isPlannedGrade = g => String(g || '').toUpperCase() === 'PLANNED';
+  const isWithdrawnGrade = g => String(g || '').toUpperCase() === 'W';
+  const isIncompleteGrade = g => String(g || '').toUpperCase() === 'I';
 
   const lastAttempt = attempts[attempts.length - 1];
-  if (lastAttempt.grade === 'RUNNING') {
-    return { status: 'RUNNING', grade: 'RUNNING', point: null, attempts, isRetake: attempts.length > 1 };
-  }
-  if (lastAttempt.grade === 'PLANNED') {
-    return { status: 'PLANNED', grade: 'PLANNED', point: null, attempts, isRetake: attempts.length > 1 };
-  }
-  if (lastAttempt.grade === 'W') {
-    return { status: 'WITHDRAWN', grade: 'W', point: null, attempts, isRetake: attempts.length > 1 };
-  }
-  if (lastAttempt.grade === 'I') {
-    return { status: 'INCOMPLETE', grade: 'I', point: null, attempts, isRetake: attempts.length > 1 };
-  }
+  const isLastRunning = isRunningGrade(lastAttempt.grade);
+  const isLastPlanned = isPlannedGrade(lastAttempt.grade);
 
   const gradedAttempts = attempts.filter(a => UIU_GRADES[a.grade] && UIU_GRADES[a.grade].point !== null);
-  if (gradedAttempts.length === 0) {
-    return { status: 'NOT_TAKEN', grade: null, point: null, attempts, isRetake: false };
+  const waivedAttempts = attempts.filter(a => isWaivedGrade(a.grade));
+
+  // 1. If there are graded attempts, apply UIU grading / retake rules
+  if (gradedAttempts.length > 0) {
+    let chosenGrade = gradedAttempts[gradedAttempts.length - 1].grade;
+    let chosenPoint = UIU_GRADES[chosenGrade].point;
+
+    if (policy === 'highest') {
+      gradedAttempts.forEach(a => {
+        const pt = UIU_GRADES[a.grade].point;
+        if (pt > chosenPoint) {
+          chosenPoint = pt;
+          chosenGrade = a.grade;
+        }
+      });
+    } else if (policy === 'all') {
+      const sumPts = gradedAttempts.reduce((acc, a) => acc + UIU_GRADES[a.grade].point, 0);
+      chosenPoint = sumPts / gradedAttempts.length;
+    }
+
+    const isFailed = (chosenGrade === 'F' || chosenPoint === 0);
+    return {
+      status: isFailed ? 'FAILED' : 'COMPLETED',
+      grade: chosenGrade,
+      point: chosenPoint,
+      attempts,
+      isRetake: attempts.length > 1,
+      gradedCount: gradedAttempts.length,
+      isWaived: false,
+      hasRunningRetake: isLastRunning
+    };
   }
 
-  let chosenGrade = gradedAttempts[gradedAttempts.length - 1].grade;
-  let chosenPoint = UIU_GRADES[chosenGrade].point;
-
-  if (policy === 'highest') {
-    gradedAttempts.forEach(a => {
-      const pt = UIU_GRADES[a.grade].point;
-      if (pt > chosenPoint) {
-        chosenPoint = pt;
-        chosenGrade = a.grade;
-      }
-    });
-  } else if (policy === 'all') {
-    const sumPts = gradedAttempts.reduce((acc, a) => acc + UIU_GRADES[a.grade].point, 0);
-    chosenPoint = sumPts / gradedAttempts.length;
+  // 2. If course was waived/transferred/exempted and has no letter grade
+  if (waivedAttempts.length > 0) {
+    return {
+      status: 'COMPLETED',
+      grade: 'WAIVED',
+      point: null,
+      attempts,
+      isRetake: attempts.length > 1,
+      isWaived: true,
+      hasRunningRetake: isLastRunning
+    };
   }
 
-  if (chosenGrade === 'F' || chosenPoint === 0) {
-    return { status: 'FAILED', grade: 'F', point: 0.0, attempts, isRetake: gradedAttempts.length > 1, gradedCount: gradedAttempts.length };
+  // 3. In-progress or non-completed states
+  if (isLastRunning) {
+    return { status: 'RUNNING', grade: 'RUNNING', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
+  }
+  if (isLastPlanned) {
+    return { status: 'PLANNED', grade: 'PLANNED', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
+  }
+  if (attempts.some(a => isIncompleteGrade(a.grade))) {
+    return { status: 'INCOMPLETE', grade: 'I', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
+  }
+  if (attempts.some(a => isWithdrawnGrade(a.grade))) {
+    return { status: 'WITHDRAWN', grade: 'W', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
   }
 
-  return {
-    status: 'COMPLETED',
-    grade: chosenGrade,
-    point: chosenPoint,
-    attempts,
-    isRetake: gradedAttempts.length > 1,
-    gradedCount: gradedAttempts.length
-  };
+  return { status: 'NOT_TAKEN', grade: null, point: null, attempts, isRetake: false, isWaived: false };
 }
 
 // ============================================================================
@@ -481,12 +506,19 @@ function computeAcademicMetrics() {
   let multiAttemptCount = 0;
 
   allKnownCodes.forEach(code => {
-    const cObj = currCourseMap.get(code) || {
-      code,
-      title: (appState.courseHistory[code] && appState.courseHistory[code][0] && appState.courseHistory[code][0].title) || 'Custom / Historical Course',
-      credits: (appState.courseHistory[code] && appState.courseHistory[code][0] && appState.courseHistory[code][0].credits) || 3.0,
+    const catalogMatch = lookupCourseByCodeSmart(code);
+    const histAttempts = appState.courseHistory[code] || [];
+    const lastAttempt = histAttempts.length > 0 ? histAttempts[histAttempts.length - 1] : null;
+
+    const cObj = currCourseMap.get(code) || (catalogMatch ? {
+      ...catalogMatch,
       category: curr.categories[0] ? curr.categories[0].id : 'General'
-    };
+    } : {
+      code,
+      title: (lastAttempt && lastAttempt.title) || 'Custom / Historical Course',
+      credits: (lastAttempt && lastAttempt.credits) || 3.0,
+      category: curr.categories[0] ? curr.categories[0].id : 'General'
+    });
     const rec = resolveCourseRecord(code, policy);
     if (rec.isRetake) multiAttemptCount++;
 
@@ -510,16 +542,20 @@ function computeAcademicMetrics() {
       if (!cObj.electiveGroup) failedCompulsoryCount++;
     } else if (rec.status === 'COMPLETED') {
       passedCourseCredits += cObj.credits;
-      gradeCounts[rec.grade] = (gradeCounts[rec.grade] || 0) + 1;
+      if (rec.grade && gradeCounts[rec.grade] !== undefined) {
+        gradeCounts[rec.grade] = (gradeCounts[rec.grade] || 0) + 1;
+      }
       const mult = policy === 'all' ? (rec.gradedCount || 1) : 1;
-      gradedCredits += cObj.credits * mult;
-      totalGradePoints += cObj.credits * rec.point * mult;
+      if (rec.point !== null && rec.point !== undefined) {
+        gradedCredits += cObj.credits * mult;
+        totalGradePoints += cObj.credits * rec.point * mult;
+      }
 
       if (catStat) {
         catStat.completedCredits += cObj.credits;
         catStat.coursesCompleted++;
       }
-      if (cObj.track && trackStats[cObj.track]) {
+      if (cObj.track && trackStats[cObj.track] && rec.grade && UIU_GRADES[rec.grade] && UIU_GRADES[rec.grade].point !== null) {
         const minG = trackStats[cObj.track].minGrade || 'D';
         if (UIU_GRADES[rec.grade].point >= UIU_GRADES[minG].point) {
           trackStats[cObj.track].completedCourses.push({ ...cObj, grade: rec.grade });
@@ -537,7 +573,8 @@ function computeAcademicMetrics() {
   // Transfer / manual additional completed credits
   const transferCr = Math.max(0, Number(appState.profile.transferCredits) || 0);
   const actualCompletedCredits = passedCourseCredits + transferCr;
-  const cgpa = gradedCredits > 0 ? (totalGradePoints / gradedCredits) : 0;
+  const rawCgpa = gradedCredits > 0 ? (totalGradePoints / gradedCredits) : 0;
+  const cgpa = Math.round((rawCgpa + Number.EPSILON) * 100) / 100;
 
   // Expected Completed Credits (Section 4)
   const elapsedTerms = Math.max(0, Number(appState.profile.elapsedTerms) || 0);
@@ -1203,38 +1240,102 @@ Term   Course Code   Course Title                                Credits   Grade
   parseUcamRawText();
 }
 
-function detectUcamGrade(line, codeMatch, creditMatch) {
-  const known = new Set([...Object.keys(UIU_GRADES), 'W', 'I', 'RUNNING', 'PLANNED', 'REGISTERED', 'INPROGRESS', 'INCOMPLETE', 'WITHDRAWN']);
-  const normalize = value => value.trim().toUpperCase().replace(/[^A-Z+-]/g, '');
-  const codeEnd = codeMatch.index + codeMatch[0].length;
-  const searchStart = creditMatch ? creditMatch.index + creditMatch[0].length : codeEnd;
-  const tail = line.slice(Math.max(codeEnd, searchStart));
+const UCAM_CODE_BLACKLIST = new Set([
+  'FALL', 'SPRING', 'SUMMER', 'TERM', 'TRIMESTER', 'SEMESTER', 'YEAR', 'BATCH',
+  'DATE', 'SLIP', 'ROOM', 'PAGE', 'CODE', 'TOTAL', 'NAME', 'STUDENT', 'CREDIT',
+  'CREDITS', 'GRADE', 'POINT', 'POINTS', 'CGPA', 'TGPA', 'GPA', 'STATUS',
+  'REMARKS', 'SECTION', 'SEC', 'DEPT', 'CAMPUS', 'DEGREE', 'MAJOR', 'MINOR',
+  'PROGRAM', 'PROG', 'COURSE', 'COURSES', 'LEVEL', 'CURRICULUM'
+]);
 
-  // UCAM table copy is often tab-separated. Read the rightmost exact grade/status
-  // cell, ignoring grade-point columns that may follow it.
-  const cells = line.includes('|')
-    ? line.split('|').map(cell => cell.replace(/&#x20;/gi, ' ').replace(/\*\*/g, '').trim()).filter(Boolean)
-    : line.split('\t').map(cell => cell.trim()).filter(Boolean);
-  for (let i = cells.length - 1; i >= 0; i--) {
-    const token = normalize(cells[i]);
-    if (known.has(token)) return normalizeUcamStatus(token);
-  }
+const UCAM_STATUS_MAP = {
+  'WAIVED': 'WAIVED',
+  'EXEMPTED': 'WAIVED',
+  'TRANSFER': 'WAIVED',
+  'EXEMPTION': 'WAIVED',
+  'EX': 'WAIVED',
+  'TR': 'WAIVED',
+  'WVD': 'WAIVED',
+  'W': 'W',
+  'WITHDRAWN': 'W',
+  'WD': 'W',
+  'I': 'I',
+  'INCOMPLETE': 'I',
+  'INC': 'I',
+  'S': 'S',
+  'SATISFACTORY': 'S',
+  'P': 'S',
+  'PASS': 'S',
+  'U': 'U',
+  'UNSATISFACTORY': 'U',
+  'RUNNING': 'RUNNING',
+  'REGISTERED': 'RUNNING',
+  'ENROLLED': 'RUNNING',
+  'INPROGRESS': 'RUNNING',
+  'IN PROGRESS': 'RUNNING',
+  'ONGOING': 'RUNNING',
+  'TAKEN': 'RUNNING',
+  'PLANNED': 'PLANNED'
+};
 
-  // For plain-text rows, only inspect tokens after the credit column. This keeps
-  // title endings such as "English I" or "Course A" from becoming grades.
-  const tokens = tail.trim().split(/\s+/).filter(Boolean);
-  for (let i = tokens.length - 1; i >= 0; i--) {
-    const token = normalize(tokens[i]);
-    if (known.has(token)) return normalizeUcamStatus(token);
+function normalizeUcamTermString(termStr) {
+  if (!termStr) return '';
+  const s = termStr.trim();
+  // UIU 3-digit term code e.g. 241 -> Spring 2024 (241)
+  const m3 = s.match(/^([12][0-9])([123])$/);
+  if (m3) {
+    const yr = '20' + m3[1];
+    const tName = m3[2] === '1' ? 'Spring' : (m3[2] === '2' ? 'Summer' : 'Fall');
+    return `${tName} ${yr} (${s})`;
   }
-  return 'UNKNOWN';
+  return s;
 }
 
-function normalizeUcamStatus(token) {
-  if (['RUNNING', 'REGISTERED', 'INPROGRESS'].includes(token)) return 'RUNNING';
-  if (token === 'WITHDRAWN') return 'W';
-  if (token === 'INCOMPLETE') return 'I';
-  return token;
+function detectUcamGradeAdvanced(remainingTokens, point) {
+  if (!remainingTokens || remainingTokens.length === 0) return 'UNKNOWN';
+
+  // 1. If point is identified, the token right before it in UCAM is the Grade!
+  if (point !== null) {
+    const ptStr = point.toFixed(2);
+    const ptStrShort = String(point);
+    for (let i = remainingTokens.length - 1; i >= 0; i--) {
+      const cleanToken = remainingTokens[i].replace(/[(),]/g, '');
+      if (cleanToken === ptStr || cleanToken === ptStrShort || parseFloat(cleanToken) === point) {
+        if (i > 0) {
+          const cand = remainingTokens[i - 1].toUpperCase().replace(/[^A-Z+-]/g, '');
+          if (GRADE_KEYS.includes(cand)) return cand;
+          if (UCAM_STATUS_MAP[cand]) return UCAM_STATUS_MAP[cand];
+        }
+      }
+    }
+  }
+
+  // 2. Look for explicit special status keywords
+  for (let i = remainingTokens.length - 1; i >= 0; i--) {
+    const raw = remainingTokens[i].toUpperCase().replace(/[^A-Z+-]/g, '');
+    if (UCAM_STATUS_MAP[raw]) return UCAM_STATUS_MAP[raw];
+  }
+
+  // 3. Look for explicit letter grades with + or - (cannot be a section!)
+  for (let i = remainingTokens.length - 1; i >= 0; i--) {
+    const raw = remainingTokens[i].toUpperCase().replace(/[^A-Z+-]/g, '');
+    if (['A-', 'B+', 'B-', 'C+', 'C-', 'D+'].includes(raw)) return raw;
+  }
+
+  // 4. Multiple letter tokens (e.g. Section B, Grade A)
+  const letterTokens = [];
+  remainingTokens.forEach(t => {
+    const clean = t.toUpperCase().replace(/[^A-Z]/g, '');
+    if (GRADE_KEYS.includes(clean)) letterTokens.push(clean);
+  });
+  if (letterTokens.length >= 2) {
+    // In UCAM format, the last single letter is Grade, earlier is Section!
+    return letterTokens[letterTokens.length - 1];
+  } else if (letterTokens.length === 1) {
+    return letterTokens[0];
+  }
+
+  return 'UNKNOWN';
 }
 
 function parseUcamRawText() {
@@ -1247,51 +1348,231 @@ function parseUcamRawText() {
     return;
   }
 
-  const curr = getActiveCurriculum();
-  const currMap = new Map();
-  curr.courses.forEach(c => currMap.set(c.code, c));
-
-  const lines = raw.split(/\r?\n/);
+  const rawLines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const attemptTracker = {};
 
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
-    if (!trimmed || /^United International|^Term\s+Course/i.test(trimmed)) return;
-
-    const codeMatch = trimmed.match(/\b([A-Z]{2,4})\s*-?\s*(\d{4}[A-C]?)\b/i);
-    if (!codeMatch) return;
-
-    const code = normalizeCourseCode(`${codeMatch[1]} ${codeMatch[2]}`);
-    attemptTracker[code] = (attemptTracker[code] || 0) + 1;
-    const attemptNo = attemptTracker[code];
-
-    const termMatch = trimmed.match(/\b(1[89][123]|2[0-9][123]|Spring\s*20\d\d|Summer\s*20\d\d|Fall\s*20\d\d)\b/i);
-    const term = termMatch ? termMatch[0] : 'Term-' + attemptNo;
-
-    const crMatch = trimmed.match(/\b([1-6]\.[05]0?)\b/);
-    const catalogCourse = currMap.get(code);
-    const credits = crMatch ? parseFloat(crMatch[1]) : (catalogCourse ? catalogCourse.credits : 3.0);
-
-    const statusOrGrade = detectUcamGrade(trimmed, codeMatch, crMatch);
-
-    const warnings = [];
-    if (!catalogCourse) warnings.push('Custom/Non-curriculum course');
-    if (!crMatch && !catalogCourse) warnings.push('Defaulted to 3.0 Cr');
-    if (statusOrGrade === 'UNKNOWN') warnings.push('Unknown grade — please select');
-    if (attemptNo > 1) warnings.push(`Repeat Attempt #${attemptNo}`);
-
-    parsedUcamRows.push({
-      idx,
-      selected: statusOrGrade !== 'UNKNOWN',
-      code,
-      title: catalogCourse ? catalogCourse.title : 'Detected UCAM Course',
-      credits,
-      term,
-      attemptNo,
-      grade: statusOrGrade,
-      warnings
-    });
+  // Detect if text is vertical (one cell per line)
+  let codeCount = 0;
+  let shortLineCount = 0;
+  rawLines.forEach(l => {
+    const m = l.match(/^([A-Z]{2,5})\s*[-_]?\s*(\d{3,4}[A-Z]?)$/i);
+    if (m && !UCAM_CODE_BLACKLIST.has(m[1].toUpperCase())) codeCount++;
+    if (l.split(/\s+/).length <= 2) shortLineCount++;
   });
+  const isVertical = codeCount >= 2 && (shortLineCount / rawLines.length) > 0.45;
+
+  let currentTermContext = '';
+
+  if (isVertical) {
+    let i = 0;
+    while (i < rawLines.length) {
+      const line = rawLines[i];
+      const tMatch = line.match(/\b(1[89][123]|2[0-9][123]|(?:Spring|Summer|Fall)\s*20\d\d)\b/i);
+      if (tMatch && !line.match(/\b[A-Z]{2,5}\s*\d{3,4}\b/i)) {
+        currentTermContext = normalizeUcamTermString(tMatch[0]);
+      }
+
+      const cMatch = line.match(/^([A-Z]{2,5})\s*[-_]?\s*(\d{3,4}[A-Z]?)$/i);
+      if (cMatch && !UCAM_CODE_BLACKLIST.has(cMatch[1].toUpperCase())) {
+        const code = normalizeCourseCode(`${cMatch[1]} ${cMatch[2]}`);
+        const catCourse = lookupCourseByCodeSmart(code);
+
+        let rowTerm = currentTermContext;
+        if (!rowTerm && i > 0) {
+          const prev = rawLines[i - 1];
+          const ptMatch = prev.match(/\b(1[89][123]|2[0-9][123]|(?:Spring|Summer|Fall)\s*20\d\d)\b/i);
+          if (ptMatch) rowTerm = normalizeUcamTermString(ptMatch[0]);
+        }
+
+        let title = catCourse ? catCourse.title : '';
+        let credits = catCourse ? catCourse.credits : null;
+        let grade = 'UNKNOWN';
+        let point = null;
+
+        let j = i + 1;
+        while (j < rawLines.length && j <= i + 9) {
+          const nextL = rawLines[j];
+          if (nextL.match(/^([A-Z]{2,5})\s*[-_]?\s*(\d{3,4}[A-Z]?)$/i) && !UCAM_CODE_BLACKLIST.has(nextL.split(/\s+/)[0].toUpperCase())) {
+            break;
+          }
+          const crM = nextL.match(/^([0-6](\.[05]0?)?)$/);
+          if (crM && credits === null) {
+            credits = parseFloat(crM[1]);
+          } else if (/^(4\.00?|3\.67|3\.33|3\.00?|2\.67|2\.33|2\.00?|1\.67|1\.33|1\.00?|0\.00?)$/.test(nextL)) {
+            point = parseFloat(nextL);
+          } else if (/^(A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F|W|I|S|U|WAIVED|EXEMPTED|TRANSFER|RUNNING|REGISTERED)$/i.test(nextL)) {
+            const normG = nextL.toUpperCase();
+            grade = UCAM_STATUS_MAP[normG] || normG;
+          } else if (!title && nextL.length > 3 && !/^\d+$/.test(nextL)) {
+            title = nextL;
+          }
+          j++;
+        }
+
+        if (credits === null) credits = catCourse ? catCourse.credits : 3.0;
+        if (!title) title = catCourse ? catCourse.title : 'Detected UCAM Course';
+
+        attemptTracker[code] = (attemptTracker[code] || 0) + 1;
+        const attemptNo = attemptTracker[code];
+        const finalTerm = rowTerm || `Term-${attemptNo}`;
+
+        const warnings = [];
+        if (!catCourse) warnings.push('Non-curriculum/Elective course');
+        if (grade === 'UNKNOWN') warnings.push('Please verify grade');
+        if (attemptNo > 1) warnings.push(`Repeat Attempt #${attemptNo}`);
+
+        parsedUcamRows.push({
+          idx: parsedUcamRows.length,
+          selected: grade !== 'UNKNOWN',
+          code,
+          title,
+          credits,
+          term: finalTerm,
+          attemptNo,
+          grade,
+          point,
+          warnings
+        });
+        i = j - 1;
+      }
+      i++;
+    }
+  } else {
+    // Horizontal line-by-line parsing
+    rawLines.forEach((line, lineIdx) => {
+      // 1. Check for Trimester header lines (e.g. "Trimester: Spring 2024" or "Fall 2023")
+      const headerTermMatch = line.match(/\b(1[89][123]|2[0-9][123]|(?:Spring|Summer|Fall)\s*20\d\d)\b/i);
+      const isHeaderLine = /^(Trimester|Term|Semester|Academic\s+Year|---|\*\*\*)/i.test(line) ||
+                           (/^((?:Spring|Summer|Fall)\s*20\d\d|2[0-9][123])$/i.test(line));
+      if (headerTermMatch && isHeaderLine) {
+        currentTermContext = normalizeUcamTermString(headerTermMatch[0]);
+        return;
+      }
+
+      // 2. Extract Course Code
+      const codeMatch = line.match(/\b([A-Z]{2,5})\s*[-_]?\s*(\d{3,4}[A-Z]?)\b/i);
+      if (!codeMatch) return;
+
+      const prefix = codeMatch[1].toUpperCase();
+      if (UCAM_CODE_BLACKLIST.has(prefix)) {
+        // Line starts with a blacklisted word like FALL 2024: record as term context if applicable
+        if (headerTermMatch) currentTermContext = normalizeUcamTermString(headerTermMatch[0]);
+        return;
+      }
+
+      const code = normalizeCourseCode(`${codeMatch[1]} ${codeMatch[2]}`);
+      const catCourse = lookupCourseByCodeSmart(code);
+
+      // 3. Determine Term for this course
+      let term = currentTermContext;
+      const lineTermMatch = line.match(/\b(1[89][123]|2[0-9][123]|(?:Spring|Summer|Fall)\s*20\d\d)\b/i);
+      if (lineTermMatch && lineTermMatch.index !== codeMatch.index) {
+        term = normalizeUcamTermString(lineTermMatch[0]);
+      }
+
+      attemptTracker[code] = (attemptTracker[code] || 0) + 1;
+      const attemptNo = attemptTracker[code];
+      if (!term) term = `Term-${attemptNo}`;
+
+      // 4. Parse columns / text
+      const cells = line.includes('\t')
+        ? line.split('\t').map(c => c.trim()).filter(Boolean)
+        : (line.includes('|') ? line.split('|').map(c => c.trim()).filter(Boolean) : []);
+
+      let grade = 'UNKNOWN';
+      let point = null;
+      let credits = catCourse ? catCourse.credits : null;
+      let title = catCourse ? catCourse.title : '';
+
+      if (cells.length >= 4) {
+        // Tab-separated or pipe-separated table copy
+        let codeIdx = cells.findIndex(c => c.replace(/\s+/g, '').toUpperCase().includes(code.replace(/\s+/g, '')));
+        if (codeIdx === -1) codeIdx = 1;
+
+        if (cells[codeIdx + 1] && isNaN(parseFloat(cells[codeIdx + 1]))) {
+          title = cells[codeIdx + 1];
+        }
+
+        // Search for credits
+        for (let c = codeIdx + 1; c < cells.length; c++) {
+          const val = cells[c];
+          if (/^([0-6](\.[05]0?)?)$/.test(val)) {
+            credits = parseFloat(val);
+            break;
+          }
+        }
+
+        // Search for grade and grade point from right to left
+        for (let c = cells.length - 1; c >= codeIdx + 1; c--) {
+          const token = cells[c].toUpperCase();
+          if (/^(4\.00?|3\.67|3\.33|3\.00?|2\.67|2\.33|2\.00?|1\.67|1\.33|1\.00?|0\.00?)$/.test(token)) {
+            point = parseFloat(token);
+            if (c > 0) {
+              const prevToken = cells[c - 1].toUpperCase();
+              if (GRADE_KEYS.includes(prevToken) || UCAM_STATUS_MAP[prevToken]) {
+                grade = UCAM_STATUS_MAP[prevToken] || prevToken;
+                break;
+              }
+            }
+          }
+          if (GRADE_KEYS.includes(token) || UCAM_STATUS_MAP[token]) {
+            grade = UCAM_STATUS_MAP[token] || token;
+            break;
+          }
+        }
+      } else {
+        // Space-separated plain text
+        const codeEnd = codeMatch.index + codeMatch[0].length;
+        let tail = line.slice(codeEnd).trim();
+
+        // Strip known course title to prevent false token collisions (e.g. "English I")
+        if (catCourse && catCourse.title) {
+          const escTitle = catCourse.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          tail = tail.replace(new RegExp('^' + escTitle + '\\s*', 'i'), '').trim();
+        }
+
+        // Extract numbers in tail: first number is credits, last number is grade point
+        const numMatches = [...tail.matchAll(/\b(\d+(?:\.\d{1,2})?)\b/g)];
+        if (numMatches.length >= 2) {
+          const firstVal = parseFloat(numMatches[0][1]);
+          const lastVal = parseFloat(numMatches[numMatches.length - 1][1]);
+          if (firstVal >= 0.5 && firstVal <= 6.0) credits = firstVal;
+          if (lastVal >= 0.0 && lastVal <= 4.0) point = lastVal;
+        } else if (numMatches.length === 1) {
+          const val = parseFloat(numMatches[0][1]);
+          if (val <= 6.0 && credits === null) credits = val;
+        }
+
+        const remainingTokens = tail.split(/\s+/).filter(Boolean);
+        grade = detectUcamGradeAdvanced(remainingTokens, point);
+      }
+
+      if (credits === null || isNaN(credits)) {
+        credits = catCourse ? catCourse.credits : 3.0;
+      }
+      if (!title) {
+        title = catCourse ? catCourse.title : 'Detected UCAM Course';
+      }
+
+      const warnings = [];
+      if (!catCourse) warnings.push('Non-curriculum/Elective course');
+      if (grade === 'UNKNOWN') warnings.push('Please verify grade');
+      if (attemptNo > 1) warnings.push(`Repeat Attempt #${attemptNo}`);
+
+      parsedUcamRows.push({
+        idx: parsedUcamRows.length,
+        selected: grade !== 'UNKNOWN',
+        code,
+        title,
+        credits,
+        term,
+        attemptNo,
+        grade,
+        point,
+        warnings
+      });
+    });
+  }
 
   previewWrap.classList.remove('hidden');
   renderUcamPreviewTable();
@@ -1303,7 +1584,7 @@ function renderUcamPreviewTable() {
   summaryEl.textContent = `Detected ${parsedUcamRows.length} Course Row(s) • Review & Edit Before Import`;
 
   if (parsedUcamRows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="py-4 px-3 text-center text-slate-400">No recognizable course rows found. Ensure lines include a course code (e.g. CSE 1111) and grade.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="py-4 px-3 text-center text-slate-400">No recognizable course rows found. Ensure text includes a course code (e.g. CSE 1111) and grade.</td></tr>`;
     return;
   }
 
@@ -1312,16 +1593,16 @@ function renderUcamPreviewTable() {
       <td class="py-2 px-2.5"><input type="checkbox" ${r.selected ? 'checked' : ''} onchange="toggleUcamPreviewRow(${i}, this.checked)" class="accent-uiu-500 rounded" /></td>
       <td class="py-2 px-2.5"><input type="text" value="${r.code}" onchange="editUcamPreviewField(${i}, 'code', this.value)" class="w-24 px-1.5 py-1 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold" /></td>
       <td class="py-2 px-2.5"><input type="text" value="${r.title}" onchange="editUcamPreviewField(${i}, 'title', this.value)" class="w-40 px-1.5 py-1 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700" /></td>
-      <td class="py-2 px-2.5"><input type="number" step="0.5" value="${r.credits}" onchange="editUcamPreviewField(${i}, 'credits', this.value)" class="w-14 px-1.5 py-1 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono" /></td>
-      <td class="py-2 px-2.5 font-mono">${r.term}</td>
+      <td class="py-2 px-2.5"><input type="number" step="0.5" value="${r.credits}" onchange="editUcamPreviewField(${i}, 'credits', this.value)" class="w-14 px-1.5 py-1 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold" /></td>
+      <td class="py-2 px-2.5 font-mono text-xs">${r.term}</td>
       <td class="py-2 px-2.5 font-mono">#${r.attemptNo}</td>
       <td class="py-2 px-2.5">
         <select onchange="editUcamPreviewField(${i}, 'grade', this.value)" class="px-1.5 py-1 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold">
-          ${['UNKNOWN','A','A-','B+','B','B-','C+','C','C-','D+','D','F','W','I','RUNNING','PLANNED'].map(g => `<option value="${g}" ${r.grade === g ? 'selected' : ''}>${g === 'UNKNOWN' ? 'Select grade' : g}</option>`).join('')}
+          ${['UNKNOWN','A','A-','B+','B','B-','C+','C','C-','D+','D','F','WAIVED','S','W','I','RUNNING','PLANNED'].map(g => `<option value="${g}" ${r.grade === g ? 'selected' : ''}>${g === 'UNKNOWN' ? 'Select grade' : (g === 'WAIVED' ? 'WAIVED (Earns Credit)' : g)}</option>`).join('')}
         </select>
       </td>
       <td class="py-2 px-2.5 text-xs ${r.warnings.length ? 'text-amber-500 font-semibold' : 'text-emerald-500'}">
-        ${r.warnings.length ? r.warnings.join('; ') : 'Verified'}
+        ${r.warnings.length ? r.warnings.join('; ') : '✓ Verified'}
       </td>
     </tr>
   `).join('');
@@ -1353,12 +1634,25 @@ function applyParsedUcamCourses() {
     appState.courseHistory = {};
   }
 
-  // Group imported rows by code to preserve attempt sequence
+  // De-duplicate identical attempts and group by course code
   const grouped = {};
+  const seenAttemptKey = new Set();
+
   chosen.forEach(r => {
+    const key = `${r.code}|${r.term}|${r.grade}`;
+    if (seenAttemptKey.has(key)) return;
+    seenAttemptKey.add(key);
+
     if (!grouped[r.code]) grouped[r.code] = [];
-    grouped[r.code].push({ grade: r.grade, term: r.term, credits: r.credits, title: r.title });
+    grouped[r.code].push({
+      grade: r.grade,
+      term: r.term,
+      credits: r.credits,
+      title: r.title
+    });
   });
+
+  // Apply to appState.courseHistory preserving attempts
   Object.keys(grouped).forEach(code => {
     appState.courseHistory[code] = grouped[code];
   });
@@ -1414,9 +1708,10 @@ function renderAcademicRecordTab(metrics) {
 
   tbody.innerHTML = codes.map(code => {
     const rec = resolveCourseRecord(code);
-    const catCourse = currMap.get(code);
-    const title = catCourse ? catCourse.title : ((rec.attempts[0] && rec.attempts[0].title) || 'Custom / Elective Course');
-    const credits = catCourse ? catCourse.credits : ((rec.attempts[0] && rec.attempts[0].credits) || 3.0);
+    const catCourse = currMap.get(code) || lookupCourseByCodeSmart(code);
+    const lastAttempt = rec.attempts[rec.attempts.length - 1];
+    const title = catCourse ? catCourse.title : ((lastAttempt && lastAttempt.title) || 'Custom / Elective Course');
+    const credits = catCourse ? catCourse.credits : ((lastAttempt && lastAttempt.credits) || 3.0);
     const attemptsBadges = rec.attempts.map((a, i) =>
       `<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">#${i + 1} (${a.term || 'Term'}): <strong>${a.grade}</strong></span>`
     ).join(' ');
@@ -1701,6 +1996,8 @@ function renderCurriculumCourseCard(c, completedCr) {
             <option value="" ${!st ? 'selected' : ''}>Not Taken</option>
             <option value="PLANNED" ${st === 'PLANNED' ? 'selected' : ''}>📌 Planned</option>
             <option value="RUNNING" ${st === 'RUNNING' ? 'selected' : ''}>⚡ Running (In Progress)</option>
+            <option value="WAIVED" ${st === 'WAIVED' ? 'selected' : ''}>Waived / Transfer / Exempted (Non-GPA Credit)</option>
+            <option value="S" ${st === 'S' ? 'selected' : ''}>Satisfactory — S (Non-credit Pass)</option>
             <option value="W" ${st === 'W' ? 'selected' : ''}>Withdrawn (W)</option>
             <option value="I" ${st === 'I' ? 'selected' : ''}>Incomplete (I)</option>
             <optgroup label="Completed / Attempted Grade">
@@ -1947,9 +2244,23 @@ function renderAdvising(metricsOverride = null) {
     prereqWarnings.length + coreqWarnings.length === 0 ? 'Prereqs & Coreqs OK' : `${prereqWarnings.length + coreqWarnings.length} Prereq/Coreq Alert(s)`;
 
   // Connected Live Estimates (CGPA, Fee, Post-Term Graduation %)
-  const projPts = metrics.totalGradePoints + selectedCr * 3.67;
-  const projCr = metrics.gradedCredits + selectedCr;
-  const projCgpa = projCr > 0 ? (projPts / projCr) : 0;
+  let liveAdvPts = metrics.totalGradePoints;
+  let liveAdvCr = metrics.gradedCredits;
+  selectedObjs.forEach(o => {
+    const code = o.code;
+    const cr = o.credits || 3.0;
+    const existing = metrics.classifiedCourses.find(c => c.code === code && (c.record.status === 'COMPLETED' || c.record.status === 'FAILED'));
+    if (existing && existing.record.point !== null) {
+      if (3.67 > existing.record.point) {
+        liveAdvPts += cr * (3.67 - existing.record.point);
+      }
+    } else {
+      liveAdvCr += cr;
+      liveAdvPts += cr * 3.67;
+    }
+  });
+  const rawLiveCgpa = liveAdvCr > 0 ? (liveAdvPts / liveAdvCr) : 0;
+  const projCgpa = Math.round((rawLiveCgpa + Number.EPSILON) * 100) / 100;
   document.getElementById('adv-live-cgpa').textContent = `${projCgpa.toFixed(2)} (@A-)`;
 
   const estPayable = selectedCr * (appState.profile.customTuitionOverride || program.tuitionPerCredit) + program.termFee + program.labFeePerTerm;
@@ -2341,33 +2652,64 @@ function updateCalculatorSummaryTotals(metricsOverride = null) {
 
   const baseCgpa = !isNaN(customCgpaVal) ? customCgpaVal : metrics.cgpa;
   const baseCredits = !isNaN(customCrVal) ? customCrVal : metrics.gradedCredits;
-  const basePoints = baseCgpa * baseCredits;
+  const basePoints = !isNaN(customCgpaVal) ? (baseCgpa * baseCredits) : metrics.totalGradePoints;
 
+  // Upcoming Term Totals (for Term GPA)
   let nextCr = 0;
   let nextPts = 0;
   simNextCourses.forEach(item => {
-    const pt = UIU_GRADES[item.grade] ? UIU_GRADES[item.grade].point : 0;
+    const pt = (UIU_GRADES[item.grade] && UIU_GRADES[item.grade].point !== null) ? UIU_GRADES[item.grade].point : 0;
     nextCr += item.credits;
     nextPts += item.credits * pt;
   });
-  const tgpa = nextCr > 0 ? (nextPts / nextCr) : 0;
+  const rawTgpa = nextCr > 0 ? (nextPts / nextCr) : 0;
+  const tgpa = Math.round((rawTgpa + Number.EPSILON) * 100) / 100;
 
-  let simTotalCr = baseCredits + nextCr;
-  let simTotalPts = basePoints + nextPts;
+  // Cumulative Projected Totals
+  let simTotalCr = baseCredits;
+  let simTotalPts = basePoints;
+  const handledRetakes = new Set();
 
+  simNextCourses.forEach(item => {
+    const normCode = normalizeCourseCode(item.code);
+    const pt = (UIU_GRADES[item.grade] && UIU_GRADES[item.grade].point !== null) ? UIU_GRADES[item.grade].point : 0;
+
+    // Check if this simulated course was already graded in the student's base record
+    const existing = metrics.classifiedCourses.find(c => c.code === normCode && (c.record.status === 'COMPLETED' || c.record.status === 'FAILED'));
+
+    if (existing && existing.record.point !== null) {
+      // It is a RETAKE! Credit hours are ALREADY in baseCredits. Do NOT add to simTotalCr!
+      handledRetakes.add(normCode);
+      const oldPt = existing.record.point;
+      // UIU retake policy: if new grade is higher, add delta points
+      if (pt > oldPt) {
+        simTotalPts += item.credits * (pt - oldPt);
+      }
+    } else {
+      // It is a NEW course (not in base graded credits)
+      simTotalCr += item.credits;
+      simTotalPts += item.credits * pt;
+    }
+  });
+
+  // Include retakes from the Retake Planner (selectedRetakes), excluding any already handled in simulator
   Object.keys(selectedRetakes).forEach(code => {
-    const c = metrics.classifiedCourses.find(x => x.code === code);
+    const normCode = normalizeCourseCode(code);
+    if (handledRetakes.has(normCode)) return;
+
+    const c = metrics.classifiedCourses.find(x => x.code === normCode);
     const oldPt = c && c.record.point !== null ? c.record.point : 0;
     const newG = selectedRetakes[code];
-    const newPt = UIU_GRADES[newG] ? UIU_GRADES[newG].point : 4.0;
+    const newPt = (UIU_GRADES[newG] && UIU_GRADES[newG].point !== null) ? UIU_GRADES[newG].point : 4.0;
     const cr = c ? c.credits : 3.0;
     if (newPt > oldPt) {
       simTotalPts += cr * (newPt - oldPt);
     }
   });
 
-  const projectedCgpa = simTotalCr > 0 ? (simTotalPts / simTotalCr) : 0;
-  const delta = projectedCgpa - baseCgpa;
+  const rawProjectedCgpa = simTotalCr > 0 ? (simTotalPts / simTotalCr) : 0;
+  const projectedCgpa = Math.round((rawProjectedCgpa + Number.EPSILON) * 100) / 100;
+  const delta = Math.round((projectedCgpa - baseCgpa + Number.EPSILON) * 100) / 100;
 
   document.getElementById('calc-current-cgpa').textContent = baseCgpa.toFixed(2);
   document.getElementById('calc-graded-credits').textContent = baseCredits.toFixed(1);
@@ -2377,7 +2719,7 @@ function updateCalculatorSummaryTotals(metricsOverride = null) {
   document.getElementById('calc-cgpa-delta').textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}`;
 
   renderCoursesByGradeInspector(metrics);
-  calculateTargetGoal(metrics, baseCgpa, baseCredits);
+  calculateTargetGoal(metrics, baseCgpa, baseCredits, basePoints);
 }
 
 function renderCalculator(metricsOverride = null) {
@@ -2486,24 +2828,28 @@ function setGoalRemainingCredits() {
   calculateTargetGoal(metrics);
 }
 
-function calculateTargetGoal(metricsOverride = null, baseCgpaOverride = null, baseCrOverride = null) {
+function calculateTargetGoal(metricsOverride = null, baseCgpaOverride = null, baseCrOverride = null, basePtsOverride = null) {
   const metrics = metricsOverride || computeAcademicMetrics();
   const baseCgpa = baseCgpaOverride !== null ? baseCgpaOverride : metrics.cgpa;
   const baseCr = baseCrOverride !== null ? baseCrOverride : metrics.gradedCredits;
-  const basePts = baseCgpa * baseCr;
+  const basePts = basePtsOverride !== null
+    ? basePtsOverride
+    : (baseCgpaOverride !== null ? (baseCgpa * baseCr) : metrics.totalGradePoints);
 
   const targetCgpa = parseFloat(document.getElementById('goal-target-cgpa').value) || 3.50;
   const futureCr = parseFloat(document.getElementById('goal-future-credits').value) || 30;
 
   const finalCr = baseCr + futureCr;
   const neededPts = targetCgpa * finalCr - basePts;
-  const reqGpa = futureCr > 0 ? (neededPts / futureCr) : 0;
+  const rawReqGpa = futureCr > 0 ? (neededPts / futureCr) : 0;
+  const reqGpa = Math.round((rawReqGpa + Number.EPSILON) * 100) / 100;
 
   const box = document.getElementById('goal-result-box');
   if (reqGpa <= 0) {
     box.innerHTML = `<div class="font-bold text-emerald-500">Target ${targetCgpa.toFixed(2)} is already achieved (Current: ${baseCgpa.toFixed(2)})!</div>`;
   } else if (reqGpa > 4.00) {
-    const maxCgpa = finalCr > 0 ? ((basePts + futureCr * 4.0) / finalCr) : 4.0;
+    const rawMax = finalCr > 0 ? ((basePts + futureCr * 4.0) / finalCr) : 4.0;
+    const maxCgpa = Math.round((rawMax + Number.EPSILON) * 100) / 100;
     box.innerHTML = `<div class="font-bold text-rose-500">Unreachable by future courses alone (Requires ${reqGpa.toFixed(2)} avg GPA &gt; 4.00). Max possible over ${futureCr} Cr is ${maxCgpa.toFixed(2)}. Combine with Retakes!</div>`;
   } else {
     box.innerHTML = `<div class="font-bold text-emerald-600 dark:text-emerald-400">Reachable Target! Required Average GPA: <span class="font-mono text-base text-uiu-500">${reqGpa.toFixed(2)}</span> across next ${futureCr} Cr.</div>`;
@@ -2581,7 +2927,8 @@ function renderRetakePlanner(metricsOverride = null) {
   Object.keys(selectedRetakes).forEach(code => {
     const c = metrics.classifiedCourses.find(x => x.code === code);
     if (c && c.record.point !== null) {
-      const newPt = UIU_GRADES[selectedRetakes[code]].point;
+      const gObj = UIU_GRADES[selectedRetakes[code]];
+      const newPt = (gObj && gObj.point !== null) ? gObj.point : 4.0;
       if (newPt > c.record.point) {
         retakeCr += c.credits;
         deltaPts += c.credits * (newPt - c.record.point);
@@ -2589,13 +2936,14 @@ function renderRetakePlanner(metricsOverride = null) {
     }
   });
 
-  const afterCgpa = metrics.gradedCredits > 0 ? ((metrics.totalGradePoints + deltaPts) / metrics.gradedCredits) : 0;
-  const gain = afterCgpa - metrics.cgpa;
+  const rawAfter = metrics.gradedCredits > 0 ? ((metrics.totalGradePoints + deltaPts) / metrics.gradedCredits) : 0;
+  const afterCgpa = Math.round((rawAfter + Number.EPSILON) * 100) / 100;
+  const gain = Math.round((afterCgpa - metrics.cgpa + Number.EPSILON) * 1000) / 1000;
   const estFee = retakeCr * tuitionRate * 0.5; // 50% first-retake concession
 
   document.getElementById('retake-cgpa-before').textContent = metrics.cgpa.toFixed(2);
   document.getElementById('retake-cgpa-after').textContent = afterCgpa.toFixed(2);
-  document.getElementById('retake-cgpa-gain').textContent = `+${gain.toFixed(3)}`;
+  document.getElementById('retake-cgpa-gain').textContent = `${gain >= 0 ? '+' : ''}${gain.toFixed(3)}`;
   document.getElementById('retake-total-cr').textContent = `${retakeCr.toFixed(1)} Cr`;
   document.getElementById('retake-est-fee').textContent = `Tk ${estFee.toLocaleString()} (50% 1st Retake)`;
 
@@ -3926,14 +4274,19 @@ function copyExtractorScript() {
   const scriptCode = `(() => {
   const rows = [...document.querySelectorAll('table tr')];
   const out = [];
-  const grades = ['A','A-','B+','B','B-','C+','C','C-','D+','D','F','W','I'];
+  const grades = ['A','A-','B+','B','B-','C+','C','C-','D+','D','F','WAIVED','EXEMPTED','TRANSFER','S','W','I','RUNNING','REGISTERED'];
+  const blacklist = /^(FALL|SPRING|SUMMER|TERM|TRIMESTER|SEMESTER|YEAR|BATCH|ROOM|PAGE|TOTAL)/i;
   rows.forEach(r => {
     const txt = r.innerText.replace(/\\s+/g, ' ').trim();
-    const m = txt.match(/\\b([A-Z]{2,4})\\s*-?\\s*(\\d{4}[A-C]?)\\b/i);
-    if (m) {
+    const m = txt.match(/\\b([A-Z]{2,5})\\s*[-_]?\\s*(\\d{3,4}[A-Z]?)\\b/i);
+    if (m && !blacklist.test(m[1])) {
       const cells = [...r.querySelectorAll('td')].map(c => c.innerText.trim());
-      const g = cells.find(c => grades.includes(c)) || (/Running|Taken/i.test(txt) ? 'Running' : '');
-      if (g) out.push(m[1].toUpperCase() + ' ' + m[2].toUpperCase() + '  3.00  ' + g);
+      let cr = '3.00';
+      for (const c of cells) {
+        if (/^([0-6](\\.[05]0?)?)$/.test(c)) { cr = parseFloat(c).toFixed(2); break; }
+      }
+      const g = cells.find(c => grades.includes(c.toUpperCase())) || (/Running|Registered|Taken|Ongoing/i.test(txt) ? 'Running' : (/Waived|Exempted|Transfer/i.test(txt) ? 'Waived' : ''));
+      if (g) out.push(m[1].toUpperCase() + ' ' + m[2].toUpperCase() + '  ' + cr + '  ' + g);
     }
   });
   copy(out.join('\\n'));
