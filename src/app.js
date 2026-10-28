@@ -267,18 +267,23 @@ function resolveCourseRecord(code, retakePolicyOverride = null) {
     return { status: 'NOT_TAKEN', grade: null, point: null, attempts: [], isRetake: false, isWaived: false };
   }
 
+  const validAttempts = attempts.filter(a => String(a.grade || '').toUpperCase() !== 'DROPPED');
+  if (validAttempts.length === 0) {
+    return { status: 'NOT_TAKEN', grade: null, point: null, attempts, isRetake: false, isWaived: false };
+  }
+
   const isWaivedGrade = g => ['WAIVED', 'EXEMPTED', 'TRANSFER', 'S'].includes(String(g || '').toUpperCase());
   const isRunningGrade = g => ['RUNNING', 'REGISTERED', 'INPROGRESS'].includes(String(g || '').toUpperCase());
   const isPlannedGrade = g => String(g || '').toUpperCase() === 'PLANNED';
   const isWithdrawnGrade = g => String(g || '').toUpperCase() === 'W';
   const isIncompleteGrade = g => String(g || '').toUpperCase() === 'I';
 
-  const lastAttempt = attempts[attempts.length - 1];
+  const lastAttempt = validAttempts[validAttempts.length - 1];
   const isLastRunning = isRunningGrade(lastAttempt.grade);
   const isLastPlanned = isPlannedGrade(lastAttempt.grade);
 
-  const gradedAttempts = attempts.filter(a => UIU_GRADES[a.grade] && UIU_GRADES[a.grade].point !== null);
-  const waivedAttempts = attempts.filter(a => isWaivedGrade(a.grade));
+  const gradedAttempts = validAttempts.filter(a => UIU_GRADES[a.grade] && UIU_GRADES[a.grade].point !== null);
+  const waivedAttempts = validAttempts.filter(a => isWaivedGrade(a.grade));
 
   // 1. If there are graded attempts, apply UIU grading / retake rules
   if (gradedAttempts.length > 0) {
@@ -303,8 +308,8 @@ function resolveCourseRecord(code, retakePolicyOverride = null) {
       status: isFailed ? 'FAILED' : 'COMPLETED',
       grade: chosenGrade,
       point: chosenPoint,
-      attempts,
-      isRetake: attempts.length > 1,
+      attempts: validAttempts,
+      isRetake: validAttempts.length > 1,
       gradedCount: gradedAttempts.length,
       isWaived: false,
       hasRunningRetake: isLastRunning
@@ -317,8 +322,8 @@ function resolveCourseRecord(code, retakePolicyOverride = null) {
       status: 'COMPLETED',
       grade: 'WAIVED',
       point: null,
-      attempts,
-      isRetake: attempts.length > 1,
+      attempts: validAttempts,
+      isRetake: validAttempts.length > 1,
       isWaived: true,
       hasRunningRetake: isLastRunning
     };
@@ -326,19 +331,19 @@ function resolveCourseRecord(code, retakePolicyOverride = null) {
 
   // 3. In-progress or non-completed states
   if (isLastRunning) {
-    return { status: 'RUNNING', grade: 'RUNNING', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
+    return { status: 'RUNNING', grade: 'RUNNING', point: null, attempts: validAttempts, isRetake: validAttempts.length > 1, isWaived: false };
   }
   if (isLastPlanned) {
-    return { status: 'PLANNED', grade: 'PLANNED', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
+    return { status: 'PLANNED', grade: 'PLANNED', point: null, attempts: validAttempts, isRetake: validAttempts.length > 1, isWaived: false };
   }
-  if (attempts.some(a => isIncompleteGrade(a.grade))) {
-    return { status: 'INCOMPLETE', grade: 'I', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
+  if (validAttempts.some(a => isIncompleteGrade(a.grade))) {
+    return { status: 'INCOMPLETE', grade: 'I', point: null, attempts: validAttempts, isRetake: validAttempts.length > 1, isWaived: false };
   }
-  if (attempts.some(a => isWithdrawnGrade(a.grade))) {
-    return { status: 'WITHDRAWN', grade: 'W', point: null, attempts, isRetake: attempts.length > 1, isWaived: false };
+  if (validAttempts.some(a => isWithdrawnGrade(a.grade))) {
+    return { status: 'WITHDRAWN', grade: 'W', point: null, attempts: validAttempts, isRetake: validAttempts.length > 1, isWaived: false };
   }
 
-  return { status: 'NOT_TAKEN', grade: null, point: null, attempts, isRetake: false, isWaived: false };
+  return { status: 'NOT_TAKEN', grade: null, point: null, attempts: validAttempts, isRetake: false, isWaived: false };
 }
 
 // ============================================================================
@@ -540,6 +545,10 @@ function computeAcademicMetrics() {
       const mult = policy === 'all' ? (rec.gradedCount || 1) : 1;
       gradedCredits += cObj.credits * mult;
       if (!cObj.electiveGroup) failedCompulsoryCount++;
+      if (rec.hasRunningRetake) {
+        runningCredits += cObj.credits;
+        if (catStat) catStat.runningCredits += cObj.credits;
+      }
     } else if (rec.status === 'COMPLETED') {
       passedCourseCredits += cObj.credits;
       if (rec.grade && gradeCounts[rec.grade] !== undefined) {
@@ -549,6 +558,10 @@ function computeAcademicMetrics() {
       if (rec.point !== null && rec.point !== undefined) {
         gradedCredits += cObj.credits * mult;
         totalGradePoints += cObj.credits * rec.point * mult;
+      }
+      if (rec.hasRunningRetake) {
+        runningCredits += cObj.credits;
+        if (catStat) catStat.runningCredits += cObj.credits;
       }
 
       if (catStat) {
@@ -1257,6 +1270,7 @@ const UCAM_STATUS_MAP = {
   'TR': 'WAIVED',
   'WVD': 'WAIVED',
   'W': 'W',
+  'WITHDRAW': 'W',
   'WITHDRAWN': 'W',
   'WD': 'W',
   'I': 'I',
@@ -1269,14 +1283,44 @@ const UCAM_STATUS_MAP = {
   'U': 'U',
   'UNSATISFACTORY': 'U',
   'RUNNING': 'RUNNING',
+  'RUNNING COURSE': 'RUNNING',
+  'RUNNINGCOURSE': 'RUNNING',
   'REGISTERED': 'RUNNING',
   'ENROLLED': 'RUNNING',
   'INPROGRESS': 'RUNNING',
   'IN PROGRESS': 'RUNNING',
   'ONGOING': 'RUNNING',
   'TAKEN': 'RUNNING',
+  'DP': 'DROPPED',
+  'DROPPED': 'DROPPED',
+  'DROP': 'DROPPED',
   'PLANNED': 'PLANNED'
 };
+
+function normalizeUcamGradeOrStatusToken(token) {
+  if (!token) return null;
+  const raw = String(token).trim();
+  const up = raw.toUpperCase();
+  const clean = up.replace(/[^A-Z+-]/g, '');
+
+  // 1. Direct letter grade check
+  if (GRADE_KEYS.includes(clean)) return clean;
+
+  // 2. Direct map lookup
+  if (UCAM_STATUS_MAP[up]) return UCAM_STATUS_MAP[up];
+  if (UCAM_STATUS_MAP[clean]) return UCAM_STATUS_MAP[clean];
+
+  // 3. Status string pattern matching
+  if (up === 'DP' || up.includes('DROP')) return 'DROPPED';
+  if (up.includes('RUNNING') || up.includes('REGISTER') || up.includes('ENROLL') || up.includes('ONGOING')) return 'RUNNING';
+  if (up.includes('WITHDRAW')) return 'W';
+  if (up.includes('INCOMPLETE')) return 'I';
+  if (up.includes('WAIVE') || up.includes('EXEMPT') || up.includes('TRANSFER')) return 'WAIVED';
+  if (up === 'S' || up.includes('SATISFAC')) return 'S';
+  if (up === 'U' || up.includes('UNSATISFAC')) return 'U';
+
+  return null;
+}
 
 function normalizeUcamTermString(termStr) {
   if (!termStr) return '';
@@ -1294,7 +1338,14 @@ function normalizeUcamTermString(termStr) {
 function detectUcamGradeAdvanced(remainingTokens, point) {
   if (!remainingTokens || remainingTokens.length === 0) return 'UNKNOWN';
 
-  // 1. If point is identified, the token right before it in UCAM is the Grade!
+  // Check 2-word combinations first (e.g. "Running Course")
+  for (let i = 0; i < remainingTokens.length - 1; i++) {
+    const combo = `${remainingTokens[i]} ${remainingTokens[i + 1]}`;
+    const normCombo = normalizeUcamGradeOrStatusToken(combo);
+    if (normCombo) return normCombo;
+  }
+
+  // 1. If point is identified, look right before point
   if (point !== null) {
     const ptStr = point.toFixed(2);
     const ptStrShort = String(point);
@@ -1302,34 +1353,26 @@ function detectUcamGradeAdvanced(remainingTokens, point) {
       const cleanToken = remainingTokens[i].replace(/[(),]/g, '');
       if (cleanToken === ptStr || cleanToken === ptStrShort || parseFloat(cleanToken) === point) {
         if (i > 0) {
-          const cand = remainingTokens[i - 1].toUpperCase().replace(/[^A-Z+-]/g, '');
-          if (GRADE_KEYS.includes(cand)) return cand;
-          if (UCAM_STATUS_MAP[cand]) return UCAM_STATUS_MAP[cand];
+          const cand = normalizeUcamGradeOrStatusToken(remainingTokens[i - 1]);
+          if (cand) return cand;
         }
       }
     }
   }
 
-  // 2. Look for explicit special status keywords
+  // 2. Look for status or grade tokens right-to-left
   for (let i = remainingTokens.length - 1; i >= 0; i--) {
-    const raw = remainingTokens[i].toUpperCase().replace(/[^A-Z+-]/g, '');
-    if (UCAM_STATUS_MAP[raw]) return UCAM_STATUS_MAP[raw];
+    const norm = normalizeUcamGradeOrStatusToken(remainingTokens[i]);
+    if (norm) return norm;
   }
 
-  // 3. Look for explicit letter grades with + or - (cannot be a section!)
-  for (let i = remainingTokens.length - 1; i >= 0; i--) {
-    const raw = remainingTokens[i].toUpperCase().replace(/[^A-Z+-]/g, '');
-    if (['A-', 'B+', 'B-', 'C+', 'C-', 'D+'].includes(raw)) return raw;
-  }
-
-  // 4. Multiple letter tokens (e.g. Section B, Grade A)
+  // 3. Fallback for section vs single letter grade (e.g. Sec A, Grade B)
   const letterTokens = [];
   remainingTokens.forEach(t => {
     const clean = t.toUpperCase().replace(/[^A-Z]/g, '');
     if (GRADE_KEYS.includes(clean)) letterTokens.push(clean);
   });
   if (letterTokens.length >= 2) {
-    // In UCAM format, the last single letter is Grade, earlier is Section!
     return letterTokens[letterTokens.length - 1];
   } else if (letterTokens.length === 1) {
     return letterTokens[0];
@@ -1400,11 +1443,13 @@ function parseUcamRawText() {
             credits = parseFloat(crM[1]);
           } else if (/^(4\.00?|3\.67|3\.33|3\.00?|2\.67|2\.33|2\.00?|1\.67|1\.33|1\.00?|0\.00?)$/.test(nextL)) {
             point = parseFloat(nextL);
-          } else if (/^(A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F|W|I|S|U|WAIVED|EXEMPTED|TRANSFER|RUNNING|REGISTERED)$/i.test(nextL)) {
-            const normG = nextL.toUpperCase();
-            grade = UCAM_STATUS_MAP[normG] || normG;
-          } else if (!title && nextL.length > 3 && !/^\d+$/.test(nextL)) {
-            title = nextL;
+          } else {
+            const normG = normalizeUcamGradeOrStatusToken(nextL);
+            if (normG) {
+              grade = normG;
+            } else if (!title && nextL.length > 3 && !/^\d+$/.test(nextL)) {
+              title = nextL;
+            }
           }
           j++;
         }
@@ -1416,14 +1461,20 @@ function parseUcamRawText() {
         const attemptNo = attemptTracker[code];
         const finalTerm = rowTerm || `Term-${attemptNo}`;
 
+        const isDropped = (grade === 'DROPPED');
+        const isRunning = (grade === 'RUNNING');
+        const selected = (grade !== 'UNKNOWN' && !isDropped);
+
         const warnings = [];
         if (!catCourse) warnings.push('Non-curriculum/Elective course');
         if (grade === 'UNKNOWN') warnings.push('Please verify grade');
+        if (isDropped) warnings.push('Dropped registration (Dp) — excluded from records');
+        if (isRunning) warnings.push('Currently ongoing trimester (Running Course)');
         if (attemptNo > 1) warnings.push(`Repeat Attempt #${attemptNo}`);
 
         parsedUcamRows.push({
           idx: parsedUcamRows.length,
-          selected: grade !== 'UNKNOWN',
+          selected,
           code,
           title,
           credits,
@@ -1504,19 +1555,25 @@ function parseUcamRawText() {
 
         // Search for grade and grade point from right to left
         for (let c = cells.length - 1; c >= codeIdx + 1; c--) {
-          const token = cells[c].toUpperCase();
-          if (/^(4\.00?|3\.67|3\.33|3\.00?|2\.67|2\.33|2\.00?|1\.67|1\.33|1\.00?|0\.00?)$/.test(token)) {
-            point = parseFloat(token);
-            if (c > 0) {
-              const prevToken = cells[c - 1].toUpperCase();
-              if (GRADE_KEYS.includes(prevToken) || UCAM_STATUS_MAP[prevToken]) {
-                grade = UCAM_STATUS_MAP[prevToken] || prevToken;
+          const cellVal = cells[c];
+          if (!cellVal) continue;
+
+          // Check if cell is a grade point
+          if (/^(4\.00?|3\.67|3\.33|3\.00?|2\.67|2\.33|2\.00?|1\.67|1\.33|1\.00?|0\.00?|0)$/.test(cellVal)) {
+            point = parseFloat(cellVal);
+            if (c > codeIdx + 1) {
+              const prevVal = cells[c - 1];
+              const normPrev = normalizeUcamGradeOrStatusToken(prevVal);
+              if (normPrev) {
+                grade = normPrev;
                 break;
               }
             }
           }
-          if (GRADE_KEYS.includes(token) || UCAM_STATUS_MAP[token]) {
-            grade = UCAM_STATUS_MAP[token] || token;
+
+          const norm = normalizeUcamGradeOrStatusToken(cellVal);
+          if (norm) {
+            grade = norm;
             break;
           }
         }
@@ -1554,14 +1611,20 @@ function parseUcamRawText() {
         title = catCourse ? catCourse.title : 'Detected UCAM Course';
       }
 
+      const isDropped = (grade === 'DROPPED');
+      const isRunning = (grade === 'RUNNING');
+      const selected = (grade !== 'UNKNOWN' && !isDropped);
+
       const warnings = [];
       if (!catCourse) warnings.push('Non-curriculum/Elective course');
       if (grade === 'UNKNOWN') warnings.push('Please verify grade');
+      if (isDropped) warnings.push('Dropped registration (Dp) — excluded from records');
+      if (isRunning) warnings.push('Currently ongoing trimester (Running Course)');
       if (attemptNo > 1) warnings.push(`Repeat Attempt #${attemptNo}`);
 
       parsedUcamRows.push({
         idx: parsedUcamRows.length,
-        selected: grade !== 'UNKNOWN',
+        selected,
         code,
         title,
         credits,
@@ -1598,7 +1661,7 @@ function renderUcamPreviewTable() {
       <td class="py-2 px-2.5 font-mono">#${r.attemptNo}</td>
       <td class="py-2 px-2.5">
         <select onchange="editUcamPreviewField(${i}, 'grade', this.value)" class="px-1.5 py-1 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold">
-          ${['UNKNOWN','A','A-','B+','B','B-','C+','C','C-','D+','D','F','WAIVED','S','W','I','RUNNING','PLANNED'].map(g => `<option value="${g}" ${r.grade === g ? 'selected' : ''}>${g === 'UNKNOWN' ? 'Select grade' : (g === 'WAIVED' ? 'WAIVED (Earns Credit)' : g)}</option>`).join('')}
+          ${['UNKNOWN','A','A-','B+','B','B-','C+','C','C-','D+','D','F','WAIVED','S','W','I','RUNNING','DROPPED','PLANNED'].map(g => `<option value="${g}" ${r.grade === g ? 'selected' : ''}>${g === 'UNKNOWN' ? 'Select grade' : (g === 'WAIVED' ? 'WAIVED (Earns Credit)' : (g === 'DROPPED' ? 'DROPPED (Dp - 0 Cr)' : (g === 'RUNNING' ? 'RUNNING (Ongoing - 0 Earned Cr)' : g)))}</option>`).join('')}
         </select>
       </td>
       <td class="py-2 px-2.5 text-xs ${r.warnings.length ? 'text-amber-500 font-semibold' : 'text-emerald-500'}">
@@ -1616,7 +1679,13 @@ function editUcamPreviewField(idx, field, val) {
   if (!parsedUcamRows[idx]) return;
   if (field === 'credits') parsedUcamRows[idx].credits = parseFloat(val) || 3.0;
   else if (field === 'code') parsedUcamRows[idx].code = normalizeCourseCode(val);
-  else parsedUcamRows[idx][field] = val;
+  else {
+    parsedUcamRows[idx][field] = val;
+    if (field === 'grade') {
+      if (val === 'DROPPED') parsedUcamRows[idx].selected = false;
+      else if (val !== 'UNKNOWN') parsedUcamRows[idx].selected = true;
+    }
+  }
 }
 
 function applyParsedUcamCourses() {
@@ -1639,6 +1708,7 @@ function applyParsedUcamCourses() {
   const seenAttemptKey = new Set();
 
   chosen.forEach(r => {
+    if (r.grade === 'DROPPED') return; // Exclude dropped course registrations from records
     const key = `${r.code}|${r.term}|${r.grade}`;
     if (seenAttemptKey.has(key)) return;
     seenAttemptKey.add(key);
