@@ -34,7 +34,7 @@ The planner does not use fixed calendar exam dates. The advising auto-fill datas
 
 ## Try the app
 
-Open the [live UIU Compass app](https://mshlikhon.github.io/uiu-compass-multi-department/). On first use, select your program, curriculum, and admission information. Your planning data is saved in that browser, so use the app's backup tools before clearing browser data or switching devices.
+Open the [live UIU Compass app](https://mshlikhon.github.io/uiu-compass-multi-department/). New visitors start with an empty record. Select your program, curriculum, and admission information, then import your UCAM history or add courses manually. Your planning data is saved in that browser, so use **More → Settings & Backup** before clearing browser data or switching devices.
 
 ## Run locally
 
@@ -60,7 +60,7 @@ The repository includes dependency-free syntax and smoke tests for the academic 
 npm test
 ```
 
-GitHub Actions runs these checks for every pull request and every push to `main`. The app also includes a browser-based academic domain suite under **Settings → Run All Unit Tests**.
+GitHub Actions runs these checks for every pull request and every push to `main`. The app also includes a browser-based academic domain suite under **More → Settings & Backup → App diagnostics**.
 
 ## Project layout
 

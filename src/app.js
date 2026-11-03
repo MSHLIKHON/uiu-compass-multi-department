@@ -21,20 +21,20 @@ const I18N = {
     hud_cgpa: 'Current CGPA',
     hud_pace: 'Pace vs Expected',
     btn_demo: 'Demo',
-    nav_dashboard: 'Dashboard',
-    nav_record: 'Academic Record',
-    nav_curriculum: 'Curriculum',
-    nav_advising: 'Advising',
+    nav_dashboard: 'Overview',
+    nav_record: 'My Record',
+    nav_curriculum: 'Courses',
+    nav_advising: 'Plan Courses',
     nav_cgpa: 'CGPA',
     nav_retakes: 'Retakes',
-    nav_fees: 'Fees & Scholarship',
+    nav_fees: 'Fees',
     nav_graduation: 'Graduation',
     nav_exams: 'Exam Routine',
     nav_tools: 'Student Tools',
     nav_reports: 'Reports',
-    nav_settings: 'Settings',
-    nav_manual: 'User Manual',
-    setup_title: 'Academic Program, Admission Batch & Dynamic Degree Credits',
+    nav_settings: 'Settings & Backup',
+    nav_manual: 'Help',
+    setup_title: 'Your program & curriculum',
     card_deg_comp: 'Degree Completion',
     cat_progress_title: 'Curriculum Category Progress'
   },
@@ -56,7 +56,7 @@ const I18N = {
     nav_reports: 'রিপোর্ট',
     nav_settings: 'সেটিংস',
     nav_manual: 'ব্যবহারবিধি',
-    setup_title: 'একাডেমিক প্রোগ্রাম, ভর্তি ব্যাচ এবং ডাইনামিক ডিগ্রি ক্রেডিট',
+    setup_title: 'আপনার প্রোগ্রাম ও কারিকুলাম',
     card_deg_comp: 'ডিগ্রি সম্পন্নকরণ',
     cat_progress_title: 'কারিকুলাম ক্যাটাগরি অগ্রগতি'
   }
@@ -120,12 +120,12 @@ function createDefaultState() {
     profile: {
       programId: 'CSE',
       curriculumId: 'cse-summer-2026',
-      admissionTerm: 'Spring',
-      admissionYear: 2024,
+      admissionTerm: 'Fall',
+      admissionYear: new Date().getFullYear(),
       degreeCredits: 141.0,
       degreeCreditsSource: 'curriculum-default', // 'curriculum-default' | 'manual-override' | 'migrated-legacy'
       manualDegreeCreditsOverride: null,
-      elapsedTerms: 6,
+      elapsedTerms: 0,
       studyBreaks: 0,
       avgCreditsPerTerm: 12.0,
       transferCredits: 0.0,
@@ -134,20 +134,18 @@ function createDefaultState() {
     },
     courseHistory: {}, // code -> [{ grade, term, credits, title }]
     customCourses: {}, // curriculumId -> [courseObj]
-    offerings: [...DATA_BUNDLE.sampleOfferings],
+    offerings: [],
     advisingSelection: [], // course codes, independent of trimester offerings
     advisingExamSlots: {}, // course code -> { day, slot }
     savedAdvisingPlans: [],
-    savedCgpaScenarios: [
-      { id: 'sc-1', name: 'Dean List Push (30 Cr @ 3.75)', targetCgpa: 3.50, futureCredits: 30, reqGpa: 3.62 }
-    ],
+    savedCgpaScenarios: [],
     examSelection: [],
     customExams: [],
     coverProfile: {
-      studentName: 'Mahmudul Hasan Likhon',
-      studentId: '011231001 • Batch 231',
-      facultyName: 'Dr. Mohammad Rezwanul Islam',
-      facultyDesig: 'Associate Professor, Dept. of CSE, UIU',
+      studentName: '',
+      studentId: '',
+      facultyName: '',
+      facultyDesig: '',
       department: 'Department of Computer Science and Engineering (CSE)'
     }
   };
@@ -729,7 +727,6 @@ function computeAcademicMetrics() {
 // INITIALIZATION & TOP-LEVEL UI CONTROLLERS
 // ============================================================================
 function initApp() {
-  initMouseDraggableTabNav();
   const savedTheme = safeGetStorage(THEME_KEY) || 'light';
   setTheme(savedTheme);
   applyUiFontScale(currentUiFontScale);
@@ -771,10 +768,9 @@ function initApp() {
     saveAppState();
     document.getElementById('migration-banner').classList.remove('hidden');
   } else {
-    // First-time visitor: load Demo Profile clearly marked as Sample Data
+    // Start with an empty personal workspace. Sample data should never appear
+    // as if it were the student's own academic record.
     appState = createDefaultState();
-    appState.isDemo = true;
-    appState.courseHistory = JSON.parse(JSON.stringify(DEMO_COURSE_HISTORY));
     saveAppState();
   }
 
@@ -829,7 +825,7 @@ function syncSetupInputsFromState() {
   document.getElementById('header-program-select').value = p.programId;
   document.getElementById('setup-program').value = p.programId;
   document.getElementById('setup-admission-term').value = p.admissionTerm || 'Spring';
-  document.getElementById('setup-admission-year').value = p.admissionYear || 2024;
+  document.getElementById('setup-admission-year').value = p.admissionYear || new Date().getFullYear();
   document.getElementById('setup-curriculum').value = p.curriculumId;
   document.getElementById('setup-degree-credits').value = getEffectiveDegreeCredits();
 
@@ -870,7 +866,7 @@ function updateProfileSetup(changeType) {
     p.customTuitionOverride = null;
   } else if (changeType === 'admission') {
     p.admissionTerm = document.getElementById('setup-admission-term').value;
-    p.admissionYear = parseInt(document.getElementById('setup-admission-year').value, 10) || 2024;
+    p.admissionYear = parseInt(document.getElementById('setup-admission-year').value, 10) || new Date().getFullYear();
     const recId = recommendCurriculumForAdmission(p.programId, p.admissionTerm, p.admissionYear);
     p.curriculumId = recId;
     document.getElementById('setup-curriculum').value = recId;
@@ -944,6 +940,12 @@ function updatePaceSettings() {
 // ============================================================================
 function refreshAllViews() {
   const metrics = computeAcademicMetrics();
+  const hasRecord = Object.values(appState.courseHistory || {}).some(attempts => Array.isArray(attempts) && attempts.length > 0)
+    || Number(appState.profile.transferCredits) > 0;
+  const dashboard = document.getElementById('tab-dashboard');
+  dashboard.classList.toggle('workspace-empty', !hasRecord);
+  dashboard.classList.toggle('workspace-ready', hasRecord);
+  document.getElementById('getting-started-note').classList.toggle('hidden', hasRecord);
   renderHeaderAndSetupStrip(metrics);
   renderDashboard(metrics);
   renderAcademicRecordTab(metrics);
@@ -4273,10 +4275,11 @@ function runBuiltInUnitTests() {
 // NAVIGATION, LANGUAGE (EN/BN), THEME & UTILITIES
 // ============================================================================
 function switchTab(tabId) {
+  const target = document.getElementById(`tab-${tabId}`);
+  if (!target) return;
   currentTab = tabId;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-  const target = document.getElementById(`tab-${tabId}`);
-  if (target) target.classList.remove('hidden');
+  target.classList.remove('hidden');
 
   document.querySelectorAll('.nav-tab-btn').forEach(btn => {
     btn.className = 'nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition';
@@ -4288,75 +4291,12 @@ function switchTab(tabId) {
   }
   const mobileSelect = document.getElementById('mobile-tab-select');
   if (mobileSelect && mobileSelect.value !== tabId) mobileSelect.value = tabId;
+  const more = document.getElementById('more-sections');
+  if (more) {
+    more.open = false;
+    more.classList.toggle('has-active-section', !!activeBtn && more.contains(activeBtn));
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function initMouseDraggableTabNav() {
-  const nav = document.getElementById('main-tab-nav');
-  if (!nav) return;
-  let startX = 0;
-  let startScroll = 0;
-  let mouseDown = false;
-  let dragging = false;
-  let suppressClick = false;
-  nav.addEventListener('mousedown', event => {
-    if (event.button !== 0) return;
-    startX = event.clientX;
-    startScroll = nav.scrollLeft;
-    mouseDown = true;
-    dragging = false;
-  });
-  window.addEventListener('mousemove', event => {
-    if (!mouseDown || event.buttons !== 1) return;
-    const delta = event.clientX - startX;
-    if (!dragging && Math.abs(delta) > 5) {
-      dragging = true;
-      nav.classList.add('is-mouse-dragging');
-    }
-    if (dragging) {
-      event.preventDefault();
-      nav.scrollLeft = startScroll - delta;
-    }
-  });
-  const finish = () => {
-    if (dragging) {
-      suppressClick = true;
-      nav.classList.remove('is-mouse-dragging');
-      window.setTimeout(() => { suppressClick = false; }, 0);
-    }
-    mouseDown = false;
-    dragging = false;
-    startX = 0;
-    startScroll = nav.scrollLeft;
-  };
-  window.addEventListener('mouseup', finish);
-  window.addEventListener('blur', finish);
-  nav.addEventListener('click', event => {
-    if (suppressClick) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
-
-    // Route tab clicks here as well as through the inline handlers. This keeps
-    // navigation reliable when the menu has just been dragged or focused.
-    const button = event.target.closest('.nav-tab-btn');
-    const tabId = button?.id?.replace(/^tab-btn-/, '');
-    if (tabId) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      switchTab(tabId);
-    }
-  }, true);
-
-  // A standard mouse wheel is vertical. Over the tab strip, use it to move
-  // through the horizontally overflowing section menu.
-  nav.addEventListener('wheel', event => {
-    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-      nav.scrollLeft += event.deltaY;
-      event.preventDefault();
-    }
-  }, { passive: false });
 }
 
 function toggleLanguage() {

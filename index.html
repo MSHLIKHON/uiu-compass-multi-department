@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UIU Compass — Multi-Department Academic Planning Platform (v2.0)</title>
+  <title>UIU Compass — Plan your degree</title>
   <!-- Tailwind CSS v3.4.17 -->
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <!-- Google Fonts: Inter, Hind Siliguri (for Bangla) & JetBrains Mono -->
@@ -47,7 +47,7 @@
   <link rel="icon" type="image/svg+xml" href="./assets/compass-mark.svg" />
   <meta name="theme-color" content="#0f172a" />
   <meta name="description" content="A multi-department academic planning workspace for UIU students." />
-  <link rel="stylesheet" href="./src/styles.css?v=2.1.0" />
+  <link rel="stylesheet" href="./src/styles.css?v=2.2.0" />
 </head>
 
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen font-sans selection:bg-uiu-500 selection:text-white transition-colors duration-200 flex flex-col overflow-x-hidden">
@@ -130,24 +130,9 @@
           <select id="header-program-select" onchange="handleQuickProgramChange(this.value)" aria-label="Select UIU Program" class="px-2.5 py-1.5 rounded-xl text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-uiu-500 max-w-[155px] sm:max-w-[200px]">
           </select>
 
-          <button onclick="switchTab('manual')" title="Open Smart User Manual & Guide" class="px-2.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-500/15 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white border border-emerald-500/30 transition flex items-center gap-1.5">
-            <i class="fa-solid fa-book-open-reader"></i>
-            <span class="hidden md:inline" data-i18n="nav_manual">User Manual</span>
-          </button>
-          <button onclick="loadDemoProfile(true)" title="Load Sample Demo Profile" class="px-2.5 py-1.5 rounded-xl text-sm font-semibold bg-uiu-500/10 hover:bg-uiu-500/20 text-uiu-600 dark:text-uiu-400 border border-uiu-500/30 transition flex items-center gap-1.5">
-            <i class="fa-solid fa-wand-magic-sparkles"></i>
-            <span class="hidden md:inline" data-i18n="btn_demo">Demo</span>
-          </button>
-
           <button onclick="toggleLanguage()" id="lang-toggle-btn" title="Switch Language (English / বাংলা)" class="px-2.5 py-1.5 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition">
             বাংলা
           </button>
-
-          <div class="hidden sm:inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-0.5" role="group" aria-label="Adjust Font Size">
-            <button onclick="adjustUiFontScale(-1)" title="Decrease Font Size" class="px-2 py-1 rounded-lg text-xs font-extrabold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition">A-</button>
-            <button onclick="adjustUiFontScale(0)" id="font-scale-indicator" title="Reset Font Size" class="px-2 py-1 rounded-lg text-xs font-extrabold text-uiu-500 hover:bg-white dark:hover:bg-slate-700 transition">100%</button>
-            <button onclick="adjustUiFontScale(1)" title="Increase Font Size" class="px-2 py-1 rounded-lg text-xs font-extrabold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition">A+</button>
-          </div>
           <button id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Theme" class="p-1.5 w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-amber-400 border border-slate-200 dark:border-slate-700 transition flex items-center justify-center">
             <i id="theme-icon" class="fa-solid fa-sun text-sm"></i>
           </button>
@@ -160,66 +145,66 @@
         <div class="relative">
           <i class="fa-solid fa-compass absolute left-3 top-1/2 -translate-y-1/2 text-uiu-500 pointer-events-none"></i>
           <select id="mobile-tab-select" onchange="switchTab(this.value)" class="w-full appearance-none pl-9 pr-10 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-uiu-500">
-            <option value="dashboard">Overview</option>
-            <option value="record">Academic record</option>
-            <option value="curriculum">Curriculum</option>
-            <option value="advising">Course advising</option>
-            <option value="cgpa">CGPA calculator</option>
-            <option value="retakes">Retake planner</option>
-            <option value="fees">Fees &amp; scholarship</option>
-            <option value="graduation">Graduation audit</option>
-            <option value="exams">Exam routine</option>
-            <option value="tools">Student tools</option>
-            <option value="reports">Reports</option>
-            <option value="settings">Settings</option>
-            <option value="manual">Help &amp; manual</option>
+            <optgroup label="My progress">
+              <option value="dashboard">Overview</option>
+              <option value="record">My record</option>
+              <option value="curriculum">Courses</option>
+              <option value="graduation">Graduation</option>
+            </optgroup>
+            <optgroup label="Plan ahead">
+              <option value="advising">Plan courses</option>
+              <option value="cgpa">CGPA</option>
+              <option value="fees">Fees</option>
+              <option value="exams">Exam routine</option>
+            </optgroup>
+            <optgroup label="More tools">
+              <option value="retakes">Retakes</option>
+              <option value="tools">Student tools</option>
+              <option value="reports">Reports</option>
+              <option value="settings">Settings &amp; backup</option>
+              <option value="manual">Help</option>
+            </optgroup>
           </select>
           <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
         </div>
       </div>
 
-      <nav id="main-tab-nav" aria-label="Main Platform Sections" class="desktop-section-nav flex items-center gap-1 overflow-x-auto no-scrollbar pt-1 border-t border-slate-100 dark:border-slate-800/60">
+      <nav id="main-tab-nav" aria-label="Main Platform Sections" class="desktop-section-nav flex items-center gap-1 pt-1 border-t border-slate-100 dark:border-slate-800/60">
         <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-uiu-500 text-uiu-600 dark:text-uiu-400 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-chart-pie"></i><span data-i18n="nav_dashboard">Dashboard</span>
+          <i class="fa-solid fa-chart-pie"></i><span data-i18n="nav_dashboard">Overview</span>
         </button>
         <button onclick="switchTab('record')" id="tab-btn-record" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-cloud-arrow-up"></i><span data-i18n="nav_record">Academic Record</span>
+          <i class="fa-solid fa-cloud-arrow-up"></i><span data-i18n="nav_record">My Record</span>
         </button>
         <button onclick="switchTab('curriculum')" id="tab-btn-curriculum" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-layer-group"></i><span data-i18n="nav_curriculum">Curriculum</span>
+          <i class="fa-solid fa-layer-group"></i><span data-i18n="nav_curriculum">Courses</span>
           <span id="nav-eligible-badge" class="px-1.5 py-0.2 text-xs rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono">0</span>
         </button>
         <button onclick="switchTab('advising')" id="tab-btn-advising" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-compass-drafting"></i><span data-i18n="nav_advising">Advising</span>
+          <i class="fa-solid fa-compass-drafting"></i><span data-i18n="nav_advising">Plan Courses</span>
           <span id="nav-advising-badge" class="px-1.5 py-0.2 text-xs rounded-full bg-uiu-500/15 text-uiu-500 font-mono">0 Cr</span>
         </button>
         <button onclick="switchTab('cgpa')" id="tab-btn-cgpa" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
           <i class="fa-solid fa-calculator"></i><span data-i18n="nav_cgpa">CGPA</span>
         </button>
-        <button onclick="switchTab('retakes')" id="tab-btn-retakes" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-rotate-left"></i><span data-i18n="nav_retakes">Retakes</span>
-        </button>
         <button onclick="switchTab('fees')" id="tab-btn-fees" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-coins"></i><span data-i18n="nav_fees">Fees & Scholarship</span>
+          <i class="fa-solid fa-coins"></i><span data-i18n="nav_fees">Fees</span>
         </button>
         <button onclick="switchTab('graduation')" id="tab-btn-graduation" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
           <i class="fa-solid fa-user-graduate"></i><span data-i18n="nav_graduation">Graduation</span>
         </button>
-        <button onclick="switchTab('exams')" id="tab-btn-exams" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-calendar-check"></i><span data-i18n="nav_exams">Exam Routine</span>
-        </button>
-        <button onclick="switchTab('tools')" id="tab-btn-tools" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-file-signature"></i><span data-i18n="nav_tools">Student Tools</span>
-        </button>
-        <button onclick="switchTab('reports')" id="tab-btn-reports" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-file-contract"></i><span data-i18n="nav_reports">Reports</span>
-        </button>
-        <button onclick="switchTab('settings')" id="tab-btn-settings" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-sliders"></i><span data-i18n="nav_settings">Settings</span>
-        </button>
-        <button onclick="switchTab('manual')" id="tab-btn-manual" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-uiu-600 dark:text-uiu-400 hover:text-uiu-500 whitespace-nowrap flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-book-open-reader"></i><span data-i18n="nav_manual">User Manual</span>
-        </button>
+        <details id="more-sections" class="more-sections ml-auto">
+          <summary id="more-sections-summary" class="nav-tab-btn flex items-center gap-1.5" aria-label="More sections"><i class="fa-solid fa-ellipsis"></i> More <i class="fa-solid fa-chevron-down text-xs"></i></summary>
+          <div class="more-sections-menu" aria-label="More tools">
+            <button onclick="switchTab('retakes')" id="tab-btn-retakes" class="nav-tab-btn"><i class="fa-solid fa-rotate-left"></i><span data-i18n="nav_retakes">Retakes</span></button>
+            <button onclick="switchTab('exams')" id="tab-btn-exams" class="nav-tab-btn"><i class="fa-solid fa-calendar-check"></i><span data-i18n="nav_exams">Exam Routine</span></button>
+            <button onclick="switchTab('tools')" id="tab-btn-tools" class="nav-tab-btn"><i class="fa-solid fa-file-signature"></i><span data-i18n="nav_tools">Student Tools</span></button>
+            <button onclick="switchTab('reports')" id="tab-btn-reports" class="nav-tab-btn"><i class="fa-solid fa-file-contract"></i><span data-i18n="nav_reports">Reports</span></button>
+            <div class="more-sections-divider"></div>
+            <button onclick="switchTab('settings')" id="tab-btn-settings" class="nav-tab-btn"><i class="fa-solid fa-sliders"></i><span data-i18n="nav_settings">Settings &amp; Backup</span></button>
+            <button onclick="switchTab('manual')" id="tab-btn-manual" class="nav-tab-btn"><i class="fa-solid fa-circle-question"></i><span data-i18n="nav_manual">Help</span></button>
+          </div>
+        </details>
       </nav>
     </div>
   </header>
@@ -297,7 +282,7 @@
               <i class="fa-solid fa-building-columns"></i>
             </span>
             <div>
-              <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="setup_title">Academic Program, Admission Batch & Dynamic Degree Credits</h2>
+              <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="setup_title">Your program &amp; curriculum</h2>
               <p id="setup-recommendation-text" class="text-sm text-slate-500 dark:text-slate-400">
                 Recommended curriculum based on your admission trimester &bull; Switching curriculum preserves all course history
               </p>
@@ -328,7 +313,7 @@
                 <option value="Summer">Summer</option>
                 <option value="Fall">Fall</option>
               </select>
-              <input id="setup-admission-year" type="number" min="2015" max="2030" value="2024" onchange="updateProfileSetup('admission')" aria-label="Admission Year" class="px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-uiu-500" />
+              <input id="setup-admission-year" type="number" min="2015" max="2030" value="2026" onchange="updateProfileSetup('admission')" aria-label="Admission Year" class="px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-uiu-500" />
             </div>
           </div>
 
@@ -352,8 +337,12 @@
         </div>
       </div>
 
+      <div id="getting-started-note" class="hidden rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-slate-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-slate-200">
+        Your record is empty. Choose your program above, then <button type="button" onclick="switchTab('record')" class="font-bold text-uiu-600 dark:text-uiu-400 underline underline-offset-2">import UCAM data or add a course</button> to see your real progress.
+      </div>
+
       <!-- Top Analytics Grid: Progress Ring (4 cols) + Actual vs Expected Pace (4 cols) + CGPA & Audit (4 cols) -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div class="requires-record grid grid-cols-1 lg:grid-cols-12 gap-5">
         <!-- Card 1: Degree Completion Progress Ring -->
         <div class="lg:col-span-4 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between relative overflow-hidden">
           <div class="flex items-start justify-between gap-3">
@@ -532,7 +521,7 @@
       </div>
 
       <!-- Category Progress Grid -->
-      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+      <div class="requires-record bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div>
             <h3 class="text-lg sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -551,7 +540,7 @@
       </div>
 
       <!-- Bottom Row: Major/Track Progress + Grade Distribution + Eligible Courses -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div class="requires-record grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div class="lg:col-span-4 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
           <div class="flex items-start justify-between gap-2 mb-3">
             <div>
@@ -1550,7 +1539,7 @@
     <section id="tab-settings" class="tab-panel hidden space-y-6">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <!-- Left 6 Cols: Versioned JSON Backup, Restore & Safe Migration -->
-        <div class="lg:col-span-6 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+        <div class="lg:col-span-12 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
           <div>
             <span class="text-sm font-bold uppercase tracking-wider text-emerald-500">Schema v2.0 • Full State Portability</span>
             <h2 class="text-lg font-bold mt-0.5">Complete JSON Backup, Restore &amp; Migration</h2>
@@ -1580,26 +1569,26 @@
 
           <!-- PWA & Offline Status + Destructive Reset -->
           <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span class="text-slate-500"><i class="fa-solid fa-wifi text-emerald-500 mr-1"></i>100% Client-Side LocalStorage • Offline Ready</span>
+            <span class="text-slate-500"><i class="fa-solid fa-shield-halved text-emerald-500 mr-1"></i>Saved in this browser • Export a backup before switching devices</span>
             <button onclick="openResetModal()" class="px-3 py-1.5 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-600 hover:text-white transition">
               <i class="fa-solid fa-trash-can mr-1"></i> Reset All Platform Data
             </button>
           </div>
         </div>
 
-        <!-- Right 6 Cols: Automated Domain Unit Test Suite Runner -->
-        <div class="lg:col-span-6 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+        <!-- Diagnostics are available when needed, without crowding daily tasks. -->
+        <details class="lg:col-span-12 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+          <summary class="font-semibold cursor-pointer text-slate-600 dark:text-slate-300">App diagnostics</summary>
           <div class="flex items-center justify-between">
             <div>
-              <span class="text-sm font-bold uppercase tracking-wider text-uiu-500">QA &amp; Domain Verification Engine</span>
-              <h3 class="text-lg font-bold">Automated Unit Test Suite (30+ Checks)</h3>
+              <h3 class="text-lg font-bold">Academic calculation checks</h3>
             </div>
             <button onclick="runBuiltInUnitTests()" class="px-3.5 py-2 rounded-xl bg-uiu-500 hover:bg-uiu-600 text-white text-sm font-bold transition">
               <i class="fa-solid fa-vial-circle-check mr-1"></i> Run All Unit Tests
             </button>
           </div>
           <div id="unit-test-results-box" class="space-y-1.5 max-h-72 overflow-y-auto pr-1 text-sm font-mono"></div>
-        </div>
+        </details>
       </div>
     </section>
 
@@ -1902,7 +1891,7 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
       <div class="flex items-center gap-2">
         <span class="w-2.5 h-2.5 rounded-full bg-uiu-500"></span>
-        <span class="font-bold text-slate-700 dark:text-slate-200">UIU Compass v2.0 (Multi-Department Edition)</span>
+        <span class="font-bold text-slate-700 dark:text-slate-200">UIU Compass</span>
         <span>&mdash; Independent Student Academic Planner for United International University</span>
       </div>
       <div class="flex items-center gap-3">
@@ -2004,6 +1993,6 @@
   <!-- Toast Container -->
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
-  <script src="./src/data.js?v=2.1.0" defer></script>
+  <script src="./src/data.js?v=2.2.0" defer></script>
 </body>
 </html>
