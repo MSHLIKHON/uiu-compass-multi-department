@@ -1,6 +1,6 @@
 {
   "name": "uiu-compass-multi-department",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "description": "A multi-department academic planning workspace for UIU students.",
   "scripts": {

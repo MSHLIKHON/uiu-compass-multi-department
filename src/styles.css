@@ -135,8 +135,7 @@
       border-color: rgba(243, 112, 33, 0.25);
       background: linear-gradient(125deg, rgba(15,23,42,0.98), rgba(30,41,59,0.98));
     }
-    .workspace-empty .requires-record,
-    .workspace-ready .welcome-panel { display: none !important; }
+    .workspace-empty .requires-record { display: none !important; }
     .welcome-copy { position: relative; z-index: 1; }
     .eyebrow {
       display: inline-flex;

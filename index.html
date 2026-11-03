@@ -47,7 +47,7 @@
   <link rel="icon" type="image/svg+xml" href="./assets/compass-mark.svg" />
   <meta name="theme-color" content="#0f172a" />
   <meta name="description" content="A multi-department academic planning workspace for UIU students." />
-  <link rel="stylesheet" href="./src/styles.css?v=2.2.0" />
+  <link rel="stylesheet" href="./src/styles.css?v=2.3.0" />
 </head>
 
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen font-sans selection:bg-uiu-500 selection:text-white transition-colors duration-200 flex flex-col overflow-x-hidden">
@@ -154,11 +154,11 @@
             <optgroup label="Plan ahead">
               <option value="advising">Plan courses</option>
               <option value="cgpa">CGPA</option>
+              <option value="retakes">Retake calculator</option>
               <option value="fees">Fees</option>
               <option value="exams">Exam routine</option>
             </optgroup>
             <optgroup label="More tools">
-              <option value="retakes">Retakes</option>
               <option value="tools">Student tools</option>
               <option value="reports">Reports</option>
               <option value="settings">Settings &amp; backup</option>
@@ -187,6 +187,9 @@
         <button onclick="switchTab('cgpa')" id="tab-btn-cgpa" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
           <i class="fa-solid fa-calculator"></i><span data-i18n="nav_cgpa">CGPA</span>
         </button>
+        <button onclick="switchTab('retakes')" id="tab-btn-retakes" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-rotate-left"></i><span data-i18n="nav_retakes">Retake Calculator</span>
+        </button>
         <button onclick="switchTab('fees')" id="tab-btn-fees" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 whitespace-nowrap flex items-center gap-1.5 transition">
           <i class="fa-solid fa-coins"></i><span data-i18n="nav_fees">Fees</span>
         </button>
@@ -196,7 +199,6 @@
         <details id="more-sections" class="more-sections ml-auto">
           <summary id="more-sections-summary" class="nav-tab-btn flex items-center gap-1.5" aria-label="More sections"><i class="fa-solid fa-ellipsis"></i> More <i class="fa-solid fa-chevron-down text-xs"></i></summary>
           <div class="more-sections-menu" aria-label="More tools">
-            <button onclick="switchTab('retakes')" id="tab-btn-retakes" class="nav-tab-btn"><i class="fa-solid fa-rotate-left"></i><span data-i18n="nav_retakes">Retakes</span></button>
             <button onclick="switchTab('exams')" id="tab-btn-exams" class="nav-tab-btn"><i class="fa-solid fa-calendar-check"></i><span data-i18n="nav_exams">Exam Routine</span></button>
             <button onclick="switchTab('tools')" id="tab-btn-tools" class="nav-tab-btn"><i class="fa-solid fa-file-signature"></i><span data-i18n="nav_tools">Student Tools</span></button>
             <button onclick="switchTab('reports')" id="tab-btn-reports" class="nav-tab-btn"><i class="fa-solid fa-file-contract"></i><span data-i18n="nav_reports">Reports</span></button>
@@ -266,9 +268,9 @@
             <span><strong>Check CGPA</strong><small>Project your target</small></span>
             <i class="fa-solid fa-arrow-right quick-start-arrow"></i>
           </button>
-          <button type="button" onclick="switchTab('exams')" class="quick-start-card">
-            <span class="quick-start-icon"><i class="fa-solid fa-calendar-check"></i></span>
-            <span><strong>Check exams</strong><small>Find routine conflicts</small></span>
+          <button type="button" onclick="switchTab('retakes')" class="quick-start-card">
+            <span class="quick-start-icon"><i class="fa-solid fa-rotate-left"></i></span>
+            <span><strong>Retake calculator</strong><small>Compare CGPA improvement</small></span>
             <i class="fa-solid fa-arrow-right quick-start-arrow"></i>
           </button>
         </div>
@@ -1993,6 +1995,6 @@
   <!-- Toast Container -->
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
-  <script src="./src/data.js?v=2.2.0" defer></script>
+  <script src="./src/data.js?v=2.3.0" defer></script>
 </body>
 </html>
