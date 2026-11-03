@@ -730,7 +730,7 @@ function computeAcademicMetrics() {
 // ============================================================================
 function initApp() {
   initMouseDraggableTabNav();
-  const savedTheme = safeGetStorage(THEME_KEY) || 'dark';
+  const savedTheme = safeGetStorage(THEME_KEY) || 'light';
   setTheme(savedTheme);
   applyUiFontScale(currentUiFontScale);
 
@@ -4286,6 +4286,9 @@ function switchTab(tabId) {
     activeBtn.className = 'nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-uiu-500 text-uiu-600 dark:text-uiu-400 whitespace-nowrap flex items-center gap-1.5 transition';
     activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }
+  const mobileSelect = document.getElementById('mobile-tab-select');
+  if (mobileSelect && mobileSelect.value !== tabId) mobileSelect.value = tabId;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function initMouseDraggableTabNav() {

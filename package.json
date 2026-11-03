@@ -1,0 +1,15 @@
+{
+  "name": "uiu-compass-multi-department",
+  "version": "2.1.0",
+  "private": true,
+  "description": "A multi-department academic planning workspace for UIU students.",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "check": "node --check src/app.js && node --check src/data.js",
+    "test": "npm run check && node tests/smoke-test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+

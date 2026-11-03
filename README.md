@@ -46,6 +46,22 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000>. The app uses public CDNs for some fonts and interface libraries, so those resources require an internet connection.
 
+If you have Node.js installed, the same preview command is available as:
+
+```bash
+npm start
+```
+
+## Quality checks
+
+The repository includes dependency-free syntax and smoke tests for the academic data files, unique HTML IDs, and matching desktop/mobile navigation targets.
+
+```bash
+npm test
+```
+
+GitHub Actions runs these checks for every pull request and every push to `main`. The app also includes a browser-based academic domain suite under **Settings → Run All Unit Tests**.
+
 ## Project layout
 
 ```text
@@ -59,8 +75,12 @@ Then open <http://localhost:8000>. The app uses public CDNs for some fonts and i
 │   ├── exam-routines.json     # Published program exam-day/slot lookup data
 │   └── styles.css             # App-specific styles
 ├── .github/workflows/
+│   ├── ci.yml                 # Runs syntax and smoke checks
 │   └── pages.yml              # Deploys the site to GitHub Pages
+├── tests/
+│   └── smoke-test.mjs         # Dependency-free structural checks
 ├── index.html                 # Page structure and library setup
+├── package.json               # Local preview and quality commands
 └── README.md
 ```
 

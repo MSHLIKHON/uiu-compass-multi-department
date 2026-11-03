@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -154,8 +154,31 @@
         </div>
       </div>
 
-      <!-- 12-Section Navigation Bar -->
-      <nav id="main-tab-nav" aria-label="Main Platform Sections" class="flex items-center gap-1 overflow-x-auto no-scrollbar pt-1 border-t border-slate-100 dark:border-slate-800/60">
+      <!-- Responsive workspace navigation -->
+      <div class="mobile-section-picker border-t border-slate-100 dark:border-slate-800/60 py-2">
+        <label for="mobile-tab-select" class="sr-only">Choose a workspace section</label>
+        <div class="relative">
+          <i class="fa-solid fa-compass absolute left-3 top-1/2 -translate-y-1/2 text-uiu-500 pointer-events-none"></i>
+          <select id="mobile-tab-select" onchange="switchTab(this.value)" class="w-full appearance-none pl-9 pr-10 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-uiu-500">
+            <option value="dashboard">Overview</option>
+            <option value="record">Academic record</option>
+            <option value="curriculum">Curriculum</option>
+            <option value="advising">Course advising</option>
+            <option value="cgpa">CGPA calculator</option>
+            <option value="retakes">Retake planner</option>
+            <option value="fees">Fees &amp; scholarship</option>
+            <option value="graduation">Graduation audit</option>
+            <option value="exams">Exam routine</option>
+            <option value="tools">Student tools</option>
+            <option value="reports">Reports</option>
+            <option value="settings">Settings</option>
+            <option value="manual">Help &amp; manual</option>
+          </select>
+          <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+        </div>
+      </div>
+
+      <nav id="main-tab-nav" aria-label="Main Platform Sections" class="desktop-section-nav flex items-center gap-1 overflow-x-auto no-scrollbar pt-1 border-t border-slate-100 dark:border-slate-800/60">
         <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="nav-tab-btn px-3 py-2 text-sm font-semibold border-b-2 border-uiu-500 text-uiu-600 dark:text-uiu-400 whitespace-nowrap flex items-center gap-1.5 transition">
           <i class="fa-solid fa-chart-pie"></i><span data-i18n="nav_dashboard">Dashboard</span>
         </button>
@@ -235,6 +258,37 @@
     <!-- TAB 1: DASHBOARD & ANALYTICS                                            -->
     <!-- ======================================================================= -->
     <section id="tab-dashboard" class="tab-panel space-y-6">
+      <!-- Clear first-step paths for the most common student tasks -->
+      <section class="welcome-panel" aria-labelledby="welcome-title">
+        <div class="welcome-copy">
+          <span class="eyebrow"><i class="fa-solid fa-location-arrow"></i> Your academic workspace</span>
+          <h2 id="welcome-title">Plan your degree without the guesswork.</h2>
+          <p>Import your academic record once, then use Compass to see progress, choose courses, calculate CGPA, and avoid exam conflicts.</p>
+        </div>
+        <div class="quick-start-grid" aria-label="Quick start actions">
+          <button type="button" onclick="switchTab('record')" class="quick-start-card quick-start-primary">
+            <span class="quick-start-icon"><i class="fa-solid fa-cloud-arrow-up"></i></span>
+            <span><strong>Import record</strong><small>Start with UCAM data</small></span>
+            <i class="fa-solid fa-arrow-right quick-start-arrow"></i>
+          </button>
+          <button type="button" onclick="switchTab('advising')" class="quick-start-card">
+            <span class="quick-start-icon"><i class="fa-solid fa-compass-drafting"></i></span>
+            <span><strong>Plan courses</strong><small>Build a safe trimester</small></span>
+            <i class="fa-solid fa-arrow-right quick-start-arrow"></i>
+          </button>
+          <button type="button" onclick="switchTab('cgpa')" class="quick-start-card">
+            <span class="quick-start-icon"><i class="fa-solid fa-calculator"></i></span>
+            <span><strong>Check CGPA</strong><small>Project your target</small></span>
+            <i class="fa-solid fa-arrow-right quick-start-arrow"></i>
+          </button>
+          <button type="button" onclick="switchTab('exams')" class="quick-start-card">
+            <span class="quick-start-icon"><i class="fa-solid fa-calendar-check"></i></span>
+            <span><strong>Check exams</strong><small>Find routine conflicts</small></span>
+            <i class="fa-solid fa-arrow-right quick-start-arrow"></i>
+          </button>
+        </div>
+      </section>
+
       <!-- Curriculum & Admission Setup Bar -->
       <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
